@@ -76,6 +76,7 @@ export const products: Product[] = [
       verdict: "Rainha do 1080p."
     }
   },
+  
 
   // --- RELÓGIOS ---
   {

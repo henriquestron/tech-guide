@@ -10,8 +10,17 @@ import { FavoritesProvider } from "@/context/FavoritesContext"; // <--- Importe 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TechGuide - Reviews e Ofertas",
-  description: "Os melhores produtos de tecnologia com reviews imparciais.",
+  title: "TechGuide Ofertas", // Título do seu site
+  description: "As melhores ofertas tech selecionadas por IA.",
+  
+  // --- ADICIONE ISSO AQUI ---
+  verification: {
+    other: {
+      lomadee: "2324685", // Ex: "22558899"
+      
+    },
+  },
+  // --------------------------
 };
 
 export default function RootLayout({
