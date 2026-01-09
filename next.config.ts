@@ -1,15 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* 👇 ISSO AQUI VAI FORÇAR O DEPLOY A FUNCIONAR 👇 */
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Ignora erros de TypeScript na build (Isso ainda funciona e ajuda a subir rápido)
   typescript: {
     ignoreBuildErrors: true,
   },
-  /* 👆 FIM DO BLOCO MÁGICO 👆 */
-
+  
+  // Configuração de Imagens (Mercado Livre e Amazon)
   images: {
     remotePatterns: [
       {
