@@ -8,29 +8,34 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Configuração com a versão específica que você solicitou
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Função auxiliar para limpar asteriscos teimosos
+function limparTexto(texto) {
+  if (!texto) return "";
+  return texto.replace(/\*\*/g, "").replace(/\*/g, "").trim();
+}
 
 export async function POST(req) {
   let browser = null;
 
   try {
     if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "Falta a GEMINI_API_KEY no .env.local" }, { status: 500 });
+      return NextResponse.json({ error: "Falta a GEMINI_API_KEY" }, { status: 500 });
     }
 
     const body = await req.json();
     const { termo, categoria } = body;
 
-    // --- DEFINIÇÃO DO MODELO SOLICITADO ---
+    // Modelo Flash Latest (Sua preferência)
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-    console.log(`\n🤖 ROBÔ INICIADO - MODELO: gemini-flash-latest`);
-    console.log(`🔎 Buscando no Mercado Livre: "${termo}"...`);
+    console.log(`\n🤖 ROBÔ LIMPO (SEM ASTERISCOS)`);
+    console.log(`🔎 Buscando: "${termo}"...`);
 
-    // --- FASE 1: PUPPETEER (SCRAPING) ---
+    // --- FASE 1: PUPPETEER ---
     browser = await puppeteer.launch({
       headless: false,
       defaultViewport: null,
@@ -71,18 +76,16 @@ export async function POST(req) {
         if (linksVistos.has(linkLimpo)) continue;
         linksVistos.add(linkLimpo);
 
-        // --- PREÇO ATUAL E ORIGINAL ---
+        // Preços
         let currentPrice = 0;
         let originalPrice = 0;
 
-        // Busca preço "De" (Riscado)
         const previousContainer = item.querySelector('.andes-money-amount--previous');
         if (previousContainer) {
             const prevVal = previousContainer.querySelector('.andes-money-amount__fraction');
             if (prevVal) originalPrice = parseFloat(prevVal.innerText.replace(/\./g, '').replace(',', '.'));
         }
 
-        // Busca preço "Por" (Atual)
         const allPrices = Array.from(item.querySelectorAll('.andes-money-amount__fraction'));
         const currentPriceEl = allPrices.find(el => !el.closest('.andes-money-amount--previous'));
         if (currentPriceEl) {
@@ -102,33 +105,38 @@ export async function POST(req) {
       return itensValidos;
     });
 
-    console.log(`🎯 Puppeteer capturou ${listaProdutos.length} produtos.`);
+    console.log(`🎯 Puppeteer: ${listaProdutos.length} produtos.`);
     await browser.close();
 
-    // --- FASE 2: GEMINI (REVIEW) ---
+    // --- FASE 2: GEMINI (SEM FORMATAÇÃO) ---
     let salvos = 0;
 
     for (const produto of listaProdutos) {
-      console.log(`🧠 Gerando Review com gemini-flash-latest para: ${produto.titulo}...`);
+      console.log(`🧠 Gemini gerando texto limpo para: ${produto.titulo}...`);
 
       let aiData = null;
 
       try {
         const prompt = `
-          Você é um analista Tech. Crie um review para este produto:
-          - Nome: "${produto.titulo}"
+          Você é um especialista em SEO. Analise:
+          - Produto: "${produto.titulo}"
           - Preço: R$ ${produto.price}
           - Categoria: "${categoria}"
-          
-          Responda APENAS com um JSON puro:
+
+          REGRAS RÍGIDAS DE FORMATAÇÃO:
+          1. NÃO USE asteriscos (**), negrito ou markdown.
+          2. Escreva apenas texto plano e limpo.
+          3. Use Keywords de busca para SEO no texto.
+
+          Responda APENAS JSON:
           {
-            "shortDescription": "Frase curta de venda",
+            "shortDescription": "Meta description persuasiva (sem asteriscos)",
             "rating": 4.8,
             "fullReview": {
-              "verdict": "Vale a pena por R$ ${produto.price}?",
-              "pros": ["Pró 1", "Pró 2"],
-              "cons": ["Contra 1"],
-              "content": "Análise técnica de 3 linhas."
+              "verdict": "Veredito direto (sem asteriscos)",
+              "pros": ["Ponto 1", "Ponto 2"],
+              "cons": ["Ponto negativo"],
+              "content": "Texto corrido de 3 linhas focado em conversão. Texto limpo."
             }
           }
         `;
@@ -142,14 +150,21 @@ export async function POST(req) {
         console.error("Erro na IA:", err.message);
       }
 
-      // Fallback para não deixar vazio
       const dadosReview = aiData || {
-         shortDescription: `Oferta: ${produto.titulo}`,
+         shortDescription: `Oferta imperdível: ${produto.titulo}`,
          rating: 4.5,
-         fullReview: { verdict: "Recomendado", pros: ["Preço"], cons: ["Estoque"], content: "Análise automática." }
+         fullReview: { verdict: "Recomendado", pros: ["Preço", "Qualidade"], cons: ["Estoque"], content: "Análise automática." }
       };
 
-      // Cálculo da Oferta (Se não houver original, cria 25% de desconto fake)
+      // --- LIMPEZA DE SEGURANÇA FINAL ---
+      // Mesmo se a IA desobedecer, nós removemos os asteriscos aqui na força bruta
+      dadosReview.shortDescription = limparTexto(dadosReview.shortDescription);
+      dadosReview.fullReview.verdict = limparTexto(dadosReview.fullReview.verdict);
+      dadosReview.fullReview.content = limparTexto(dadosReview.fullReview.content);
+      dadosReview.fullReview.pros = dadosReview.fullReview.pros.map(p => limparTexto(p));
+      dadosReview.fullReview.cons = dadosReview.fullReview.cons.map(c => limparTexto(c));
+
+      // Preço Oferta
       const precoDe = (produto.originalPrice > produto.price) 
                       ? produto.originalPrice 
                       : (produto.price * 1.25); 
@@ -171,7 +186,7 @@ export async function POST(req) {
       await delay(1500); 
     }
 
-    return NextResponse.json({ success: true, message: `${salvos} processados com gemini-flash-latest.` });
+    return NextResponse.json({ success: true, message: `${salvos} produtos limpos salvos.` });
 
   } catch (error) {
     if (browser) await browser.close();
