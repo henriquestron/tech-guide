@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// Importações do Puppeteer Híbrido
 import puppeteerCore from "puppeteer-core";
-import puppeteer from "puppeteer"; // Mantemos o normal para rodar no seu PC
+import puppeteer from "puppeteer"; 
 import chromium from "@sparticuz/chromium";
 
-// --- CONFIGURAÇÃO VERCEL (Aumenta tempo limite para 60s) ---
-export const maxDuration = 60; 
-export const dynamic = 'force-dynamic';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// --- CONFIGURAÇÕES DO NEXT.JS (ISSO EVITA O ERRO DE BUILD) ---
+// Diz ao Next.js: "Não tente rodar isso no build, é dinâmico!"
+export const dynamic = 'force-dynamic'; 
+export const maxDuration = 60; // Aumenta tempo limite na Vercel
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -24,25 +16,37 @@ export async function POST(req) {
   let browser = null;
 
   try {
+    // 1. VERIFICAÇÃO DE SEGURANÇA (DENTRO DA FUNÇÃO)
+    // Se as chaves não existirem, ele para aqui e não quebra o build
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+       return NextResponse.json({ error: "Supabase Keys faltando na Vercel!" }, { status: 500 });
+    }
+    
     if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "Falta a GEMINI_API_KEY" }, { status: 500 });
+       return NextResponse.json({ error: "Gemini Key faltando na Vercel!" }, { status: 500 });
     }
 
+    // --- CONEXÃO SUPABASE (AGORA AQUI DENTRO) ---
+    // Movido para cá para evitar o erro "supabaseUrl is required" no build
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    );
+
+    // --- CONEXÃO GEMINI ---
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const body = await req.json();
     const { termo, categoria } = body;
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-    console.log(`\n🤖 ROBÔ VERCEL/LOCAL - Buscando: "${termo}"`);
+    console.log(`\n🤖 ROBÔ INICIADO - Termo: "${termo}"`);
 
-    // --- LÓGICA HÍBRIDA DE NAVEGADOR ---
+    // --- LÓGICA DO NAVEGADOR (VERCEL vs LOCAL) ---
     let launchOptions;
     let puppeteerInstance;
 
     if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
-      // ESTOU NA VERCEL (NUVEM)
-      console.log("☁️ Rodando em modo NUVEM (Chromium Leve)");
-      
-      // Configura o Chromium para Vercel
+      console.log("☁️ Modo NUVEM (Chromium)");
       chromium.setGraphicsMode = false;
       
       puppeteerInstance = puppeteerCore;
@@ -54,29 +58,23 @@ export async function POST(req) {
         ignoreHTTPSErrors: true,
       };
     } else {
-      // ESTOU NO SEU PC (LOCAL)
-      console.log("💻 Rodando em modo LOCAL (Chrome Completo)");
+      console.log("💻 Modo LOCAL (Chrome)");
       puppeteerInstance = puppeteer;
       launchOptions = {
-        headless: false, // Abre janela pra você ver
+        headless: false,
         args: ["--start-maximized", "--no-sandbox"],
         defaultViewport: null,
       };
     }
 
-    // Lança o navegador com a opção escolhida
     browser = await puppeteerInstance.launch(launchOptions);
     const page = await browser.newPage();
     
-    // User Agent genérico para evitar bloqueio
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
     const url = `https://lista.mercadolivre.com.br/${termo.replace(/ /g, "-")}_NoIndex_True`;
-    
-    // Timeout maior para garantir carregamento na nuvem
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
     
-    // Scroll leve
     await page.evaluate(() => window.scrollBy(0, 500));
     await delay(1000);
 
@@ -96,21 +94,21 @@ export async function POST(req) {
         if (itensValidos.length >= limite) break;
         const linkEl = item.querySelector('a');
         if (!linkEl) continue;
-
         let linkOriginal = linkEl.href;
         if (linkOriginal.includes('click1') || linkOriginal.includes('mclics')) continue;
         let linkLimpo = linkOriginal.split('?')[0];
         if (linksVistos.has(linkLimpo)) continue;
         linksVistos.add(linkLimpo);
 
-        // Preços
         let currentPrice = 0;
         let originalPrice = 0;
+        
         const previousContainer = item.querySelector('.andes-money-amount--previous');
         if (previousContainer) {
             const prevVal = previousContainer.querySelector('.andes-money-amount__fraction');
             if (prevVal) originalPrice = parseFloat(prevVal.innerText.replace(/\./g, '').replace(',', '.'));
         }
+        
         const allPrices = Array.from(item.querySelectorAll('.andes-money-amount__fraction'));
         const currentPriceEl = allPrices.find(el => !el.closest('.andes-money-amount--previous'));
         if (currentPriceEl) currentPrice = parseFloat(currentPriceEl.innerText.replace(/\./g, '').replace(',', '.'));
@@ -127,13 +125,12 @@ export async function POST(req) {
       return itensValidos;
     });
 
-    console.log(`🎯 Encontrados: ${listaProdutos.length}`);
+    console.log(`🎯 Puppeteer encontrou: ${listaProdutos.length}`);
     await browser.close();
 
-    // --- GEMINI ---
+    // --- GEMINI & SALVAMENTO ---
     let salvos = 0;
     for (const produto of listaProdutos) {
-      // Fallback básico se IA falhar
       let dadosReview = {
          shortDescription: `Oferta: ${produto.titulo}`,
          rating: 4.5,
@@ -167,11 +164,10 @@ export async function POST(req) {
       }]);
 
       if (!error) salvos++;
-      // Delay menor na Vercel pra não estourar tempo
       await delay(500); 
     }
 
-    return NextResponse.json({ success: true, message: `${salvos} salvos (Modo Nuvem).` });
+    return NextResponse.json({ success: true, message: `${salvos} salvos.` });
 
   } catch (error) {
     if (browser) await browser.close();
