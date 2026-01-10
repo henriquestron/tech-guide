@@ -1,53 +1,91 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from 'react';
+
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { Product } from "@/types";
 
 interface FavoritesContextType {
-  favorites: string[]; // Lista de IDs dos produtos
-  toggleFavorite: (id: string) => void;
-  isFavorite: (id: string) => boolean;
+  favorites: Product[];
+  toggleFavorite: (product: Product) => void;
+  isFavorite: (productId: string | number) => boolean;
+  clearFavorites: () => void;
 }
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
 
-export function FavoritesProvider({ children }: { children: React.ReactNode }) {
-  const [favorites, setFavorites] = useState<string[]>([]);
+export function FavoritesProvider({ children }: { children: ReactNode }) {
+  const [favorites, setFavorites] = useState<Product[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Carregar do LocalStorage ao iniciar
+ // 1. Carregar do LocalStorage (COM FAXINA AUTOMÁTICA)
   useEffect(() => {
-    const stored = localStorage.getItem('techguide_favorites');
-    if (stored) {
-      setFavorites(JSON.parse(stored));
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("techguide_favorites");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          
+          // FAXINA: Só aceita produtos que tenham ID, Título e Imagem válidos
+          // O resto (fantasmas) é descartado
+          const validFavorites = Array.isArray(parsed) 
+            ? parsed.filter((p: any) => p && p.id && p.title && p.image)
+            : [];
+
+          setFavorites(validFavorites);
+        } catch (e) {
+          console.error("Erro ao carregar favoritos:", e);
+          setFavorites([]); // Se der erro no JSON, limpa tudo
+        }
+      }
+      setIsLoaded(true);
     }
   }, []);
 
-  // Função para adicionar/remover
-  const toggleFavorite = (id: string) => {
+  // 2. Salvar no LocalStorage sempre que a lista mudar
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("techguide_favorites", JSON.stringify(favorites));
+    }
+  }, [favorites, isLoaded]);
+
+  // --- A MÁGICA DA CORREÇÃO (String vs Number) ---
+  
+  const toggleFavorite = (product: Product) => {
     setFavorites((prev) => {
-      const isAlreadyFavorite = prev.includes(id);
-      let newFavorites;
-      
-      if (isAlreadyFavorite) {
-        newFavorites = prev.filter((favId) => favId !== id); // Remove
+      // Verifica se já existe convertendo ambos os IDs para STRING
+      // Isso resolve o problema de comparar 123 (Number) com "123" (String do Banco)
+      const exists = prev.some((item) => String(item.id) === String(product.id));
+
+      if (exists) {
+        // Se existe, remove da lista
+        return prev.filter((item) => String(item.id) !== String(product.id));
       } else {
-        newFavorites = [...prev, id]; // Adiciona
+        // Se não existe, adiciona
+        return [...prev, product];
       }
-      
-      localStorage.setItem('techguide_favorites', JSON.stringify(newFavorites));
-      return newFavorites;
     });
   };
 
-  const isFavorite = (id: string) => favorites.includes(id);
+  const isFavorite = (productId: string | number) => {
+    // Também converte para String aqui para garantir que o coração fique vermelho
+    return favorites.some((item) => String(item.id) === String(productId));
+  };
+
+  const clearFavorites = () => {
+    setFavorites([]);
+  };
 
   return (
-    <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite }}>
+    <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite, clearFavorites }}>
       {children}
     </FavoritesContext.Provider>
   );
 }
 
+// Hook para usar em qualquer lugar do site
 export function useFavorites() {
   const context = useContext(FavoritesContext);
-  if (!context) throw new Error("useFavorites deve ser usado dentro de um FavoritesProvider");
+  if (!context) {
+    throw new Error("useFavorites deve ser usado dentro de um FavoritesProvider");
+  }
   return context;
 }

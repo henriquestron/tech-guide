@@ -2,53 +2,62 @@ import { products as staticProducts } from "@/data/products";
 import { supabase } from "@/lib/supabaseClient";
 import ProductShowcase from "@/components/ProductShowcase";
 
-// --- CORREÇÃO DO ERRO DE BUILD ---
-// 'force-dynamic' obriga a página a ser gerada no servidor a cada acesso.
-// Isso impede que o Next.js tente conectar no banco durante o "Build" estático.
+// 'force-dynamic' obriga o Next.js a buscar dados novos a cada acesso (sem cache eterno)
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   
-  // 1. Busca no Banco
-  console.log("🔄 Buscando produtos...");
+  console.log("--- INICIANDO HOME PAGE ---");
   
-  // Adicionamos um try/catch para garantir que o site não caia se o banco falhar
   let dbProducts = [];
   try {
-    const { data, error } = await supabase.from('products').select('*');
+    // Busca produtos no Supabase
+    // Ordenamos por ID decrescente para pegar os últimos adicionados
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('id', { ascending: false }); 
+
     if (error) {
-      console.error("❌ Erro Supabase:", error);
+      console.error("❌ Erro ao buscar no Supabase:", error.message);
     } else {
+      console.log(`✅ Sucesso! Supabase retornou ${data?.length} produtos.`);
       dbProducts = data || [];
     }
   } catch (err) {
     console.error("❌ Erro fatal na conexão:", err);
   }
 
-  // 2. Formata os dados
+  // Formata os dados do banco para o padrão do TypeScript/App
   const formattedDbProducts = dbProducts.map((item: any) => ({
-    id: item.id,
-    title: item.title,
+    id: String(item.id), // Converte para String para garantir compatibilidade com favoritos
+    title: item.title || "Produto sem título",
+    
+    // Proteção contra preços nulos ou texto
+    price: item.price ? Number(item.price) : 0, 
+    originalPrice: item.original_price ? Number(item.original_price) : 0,
+    
+    image: item.image || "/placeholder.png",
     category: item.category || 'ofertas',
-    image: item.image,
-    price: Number(item.price),
-    originalPrice: Number(item.original_price), 
     rating: Number(item.rating) || 4.5,
     shortDescription: item.short_description || "Selecionado por IA.",
     brand: item.brand || "Tech",
+    
+    // Mapeia o link para os dois campos possíveis para evitar erros
     affiliateLink: item.link || "#", 
-    fullReview: item.full_review || {
-      verdict: "Análise pendente.",
-      pros: [],
-      cons: [],
-      specs: {},
-      content: ""
-    }
+    link: item.link || "#",
+    
+    fullReview: item.full_review || {}
   }));
 
-  // 3. Junta tudo (Banco + Estático)
-  const allProducts = [...formattedDbProducts, ...staticProducts];
+  // Juntar listas + FILTRO DE SEGURANÇA
+  // O .filter remove qualquer item que seja null, undefined ou não tenha ID
+  const allMergedProducts = [...formattedDbProducts, ...staticProducts]
+    .filter(p => p !== null && p !== undefined && p.id);
+  
+  console.log(`📊 Total de produtos VÁLIDOS enviados para a vitrine: ${allMergedProducts.length}`);
 
-  // 4. Entrega para o componente que cuida da tela
-  return <ProductShowcase products={allProducts} />;
+  // Entrega para o componente visual
+// Adicione "as any" aqui 👇
+return <ProductShowcase products={allMergedProducts as any} />;
 }

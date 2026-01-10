@@ -17,7 +17,6 @@ export const metadata: Metadata = {
   verification: {
     other: {
       lomadee: "2324685", // Ex: "22558899"
-      
     },
   },
   // --------------------------

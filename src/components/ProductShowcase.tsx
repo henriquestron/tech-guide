@@ -1,9 +1,9 @@
-"use client"; // <--- Isso habilita a interatividade (clicks e estados)
+"use client";
 
 import { useState } from "react";
 import ProductCard from "@/components/ProductCard";
-// IMPORTANTE: Verifique se o caminho do seu ReviewModal está correto:
-import ReviewModal from "@/components/ReviewModal"; 
+import ReviewModal from "@/components/ReviewModal";
+// import { Product } from "@/types"; // Descomente se tiver o tipo
 
 interface ProductShowcaseProps {
   products: any[];
@@ -13,7 +13,6 @@ export default function ProductShowcase({ products }: ProductShowcaseProps) {
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Função que o ProductCard está pedindo e que estava faltando
   const handleOpenReview = (product: any) => {
     setSelectedProduct(product);
     setIsModalOpen(true);
@@ -24,11 +23,13 @@ export default function ProductShowcase({ products }: ProductShowcaseProps) {
     setSelectedProduct(null);
   };
 
-  return (
-    <div className="min-h-screen bgblack text-white pb-12"> 
-      {/* ^^^ Mudei para bg-gray-900 (Escuro) e text-white */}
+  // Proteção Extra: Se products vier nulo/undefined, usa array vazio
+  const safeProducts = Array.isArray(products) ? products : [];
 
-      {/* Hero / Cabeçalho */}
+  return (
+    <div className="min-h-screen bg-zinc-950 text-white pb-12">
+      
+      {/* Hero */}
       <div className="bg-blue-700 py-16 mb-10 shadow-lg shadow-blue-900/20">
         <div className="container mx-auto px-4 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white">
@@ -41,40 +42,47 @@ export default function ProductShowcase({ products }: ProductShowcaseProps) {
       </div>
 
       <div className="container mx-auto px-4">
-        {/* Contador de Ofertas */}
+        {/* Contador */}
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-3">
             Destaques
           </h2>
-          <span className="bg-gray-800 text-blue-400 text-sm font-medium px-3 py-1 rounded-full border border-gray-700">
-            Total: {products.length} produtos
+          <span className="bg-zinc-800 text-blue-400 text-sm font-medium px-3 py-1 rounded-full border border-zinc-700">
+            Total: {safeProducts.length} produtos
           </span>
         </div>
 
         {/* GRID DE PRODUTOS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map((product, index) => (
-            <ProductCard 
-              key={`${product.id}-${index}`} 
-              product={product} 
-              onOpenReview={handleOpenReview} // <--- AQUI ESTÁ A CORREÇÃO DO ERRO
-            />
-          ))}
+          {safeProducts.map((product, index) => {
+            // --- BLINDAGEM AQUI ---
+            // Se o produto for nulo, ou não tiver ID, pula ele (retorna null)
+            if (!product || !product.id) return null;
+
+            return (
+              <ProductCard 
+                key={`${product.id}-${index}`} 
+                product={product} 
+                onOpenReview={handleOpenReview} 
+              />
+            );
+          })}
         </div>
 
-        {products.length === 0 && (
-          <div className="text-center py-20 text-gray-500">
-            Nenhum produto encontrado.
+        {safeProducts.length === 0 && (
+          <div className="text-center py-20 text-zinc-500 border border-dashed border-zinc-800 rounded-xl mt-8">
+            <p className="text-lg">Nenhum produto encontrado.</p>
           </div>
         )}
       </div>
 
-      {/* MODAL DE REVIEW */}
       {selectedProduct && (
         <ReviewModal
           isOpen={isModalOpen}
           onClose={handleCloseReview}
           product={selectedProduct}
+          allProducts={safeProducts}
+          onSwitchProduct={(newProduct) => setSelectedProduct(newProduct)}
         />
       )}
     </div>

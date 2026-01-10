@@ -1,97 +1,89 @@
-"use client";
+import { products as staticProducts } from "@/data/products";
+import { supabase } from "@/lib/supabaseClient";
+import ProductShowcase from "@/components/ProductShowcase";
 
-import { useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
-import { products } from "@/data/products";
-import ProductCard from "@/components/ProductCard";
-import ReviewModal from "@/components/ReviewModal";
-import { Product } from "@/types";
-import { SearchX, Search } from "lucide-react";
+export const dynamic = 'force-dynamic';
 
-function SearchResults() {
-  const searchParams = useSearchParams();
-  const query = searchParams.get("q") || "";
-  
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    if (query) {
-      const lowerQuery = query.toLowerCase();
-      const results = products.filter((product) => {
-        return (
-          product.title.toLowerCase().includes(lowerQuery) ||
-          product.category.toLowerCase().includes(lowerQuery) ||
-          product.shortDescription.toLowerCase().includes(lowerQuery) ||
-          product.brand?.toLowerCase().includes(lowerQuery)
-        );
-      });
-      setFilteredProducts(results);
-    } else {
-      setFilteredProducts([]);
-    }
-  }, [query]);
-
-  const handleOpenReview = (product: Product) => {
-    setSelectedProduct(product);
-    setIsModalOpen(true);
-  };
-
-  return (
-    <>
-      <div className="mb-8 border-b border-zinc-200 dark:border-zinc-800 pb-4">
-        <h1 className="text-3xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-          <Search className="text-blue-600" />
-          Resultados para "{query}"
-        </h1>
-        <p className="text-zinc-500 mt-1">
-          {filteredProducts.length} produtos encontrados
-        </p>
-      </div>
-
-      {filteredProducts.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((product) => (
-            <ProductCard 
-              key={product.id} 
-              product={product} 
-              onOpenReview={handleOpenReview} 
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="bg-zinc-100 dark:bg-zinc-900 p-6 rounded-full mb-4">
-            <SearchX size={48} className="text-zinc-400" />
-          </div>
-          <h2 className="text-xl font-semibold text-zinc-900 dark:text-white mb-2">
-            Nenhum produto encontrado.
-          </h2>
-          <p className="text-zinc-500 max-w-md">
-            Tente buscar por termos mais genéricos como "Samsung", "Gamer" ou "4K".
-          </p>
-        </div>
-      )}
-
-      {/* --- A CORREÇÃO ESTÁ AQUI EMBAIXO --- */}
-      <ReviewModal 
-        product={selectedProduct} 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSwitchProduct={(newProduct) => setSelectedProduct(newProduct)} 
-      />
-    </>
-  );
+// ATUALIZAÇÃO NEXT.JS 15: searchParams agora é uma Promise
+interface SearchPageProps {
+  searchParams: Promise<{ q?: string }>;
 }
 
-export default function SearchPage() {
+export default async function SearchPage(props: SearchPageProps) {
+  // 1. Desembrulha a promessa (Correção do erro)
+  const searchParams = await props.searchParams;
+  const query = searchParams.q || "";
+  
+  // 2. Busca no Banco de Dados (Supabase)
+  let dbProducts: any[] = [];
+  
+  if (query) {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .or(`title.ilike.%${query}%,category.ilike.%${query}%,short_description.ilike.%${query}%`)
+        .order('id', { ascending: false });
+
+      if (!error && data) {
+        dbProducts = data;
+      }
+    } catch (err) {
+      console.error("Erro na busca Supabase:", err);
+    }
+  }
+
+  // 3. Formata os dados do Banco
+  const formattedDbProducts = dbProducts.map((item: any) => ({
+    id: String(item.id),
+    title: item.title,
+    category: item.category || 'ofertas',
+    image: item.image || "/placeholder.png",
+    price: Number(item.price) || 0,
+    originalPrice: Number(item.original_price) || 0,
+    rating: Number(item.rating) || 4.5,
+    shortDescription: item.short_description || "",
+    brand: item.brand || "Tech",
+    affiliateLink: item.link || "#", 
+    link: item.link || "#",
+    fullReview: item.full_review || {}
+  }));
+
+  // 4. Busca nos Produtos Estáticos (Manual)
+  const filteredStatic = staticProducts.filter((product) => {
+    if (!query) return false;
+    const term = query.toLowerCase();
+    return (
+      product.title.toLowerCase().includes(term) ||
+      product.category.toLowerCase().includes(term) ||
+      product.shortDescription?.toLowerCase().includes(term) ||
+      (product.brand && product.brand.toLowerCase().includes(term))
+    );
+  });
+
+  // 5. Junta tudo e protege contra nulos (Filtro de Segurança)
+  const allFoundProducts = [...formattedDbProducts, ...filteredStatic]
+    .filter(p => p && p.id);
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black pt-8 pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <Suspense fallback={<div className="text-center py-20">Carregando busca...</div>}>
-          <SearchResults />
-        </Suspense>
+        
+        {/* Cabeçalho da Busca */}
+        <div className="mb-8 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+          <h1 className="text-3xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            Resultados para "{query}"
+          </h1>
+          <p className="text-zinc-500 mt-1">
+            {allFoundProducts.length} produtos encontrados
+          </p>
+        </div>
+
+        {/* Exibição dos Produtos */}
+        <div className="-mt-10"> 
+           <ProductShowcase products={allFoundProducts as any} />
+        </div>
+
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ export interface Product {
   id: string;
   title: string;
   category: Category;
+  link?: string;
   image: string;
   price: number;
   originalPrice?: number; // <--- Adicione esta linha (O "?" diz que é opcional)
