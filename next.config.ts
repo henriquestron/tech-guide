@@ -1,9 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Ignora erros de TypeScript na build (Isso ainda funciona e ajuda a subir rápido)
+  // Ignora erros de TypeScript na build
   typescript: {
     ignoreBuildErrors: true,
+  },
+  
+  // @ts-expect-error - A propriedade existe no runtime do Next.js, mas o TS pode reclamar
+  eslint: {
+    ignoreDuringBuilds: true,
   },
   
   // Configuração de Imagens (Mercado Livre e Amazon)

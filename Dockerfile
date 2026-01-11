@@ -1,7 +1,7 @@
 # Usa uma imagem oficial do Node.js
 FROM node:18-slim
 
-# Instala bibliotecas necessárias para o Chrome rodar (Isso é o segredo!)
+# Instala o Chrome e dependências do Linux
 RUN apt-get update \
     && apt-get install -y wget gnupg \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
@@ -11,23 +11,23 @@ RUN apt-get update \
       --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Configura o diretório de trabalho
 WORKDIR /app
 
-# Copia os arquivos de dependência
 COPY package*.json ./
 
-# Instala as dependências do projeto
+# --- LINHA NOVA IMPORTANTE ---
+# Diz pro Puppeteer: "Não baixe o Chrome, eu já instalei acima via apt-get"
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+# Instala as dependências
 RUN npm install
 
-# Copia o resto do projeto
 COPY . .
 
-# Constrói o site Next.js
+# Constrói o site (Agora com regras relaxadas do next.config)
 RUN npm run build
 
-# Expõe a porta que o Render usa
 EXPOSE 3000
 
-# Comando para iniciar o site
 CMD ["npm", "start"]
