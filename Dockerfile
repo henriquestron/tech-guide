@@ -1,5 +1,5 @@
 # Usa uma imagem oficial do Node.js
-FROM node:22-alpine
+FROM node:22-slim
 
 # Instala o Chrome e dependências do Linux
 RUN apt-get update \
