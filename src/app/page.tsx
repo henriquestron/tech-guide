@@ -1,3 +1,5 @@
+//helou word
+
 import { products as staticProducts } from "@/data/products";
 import { supabase } from "@/lib/supabaseClient";
 import ProductShowcase from "@/components/ProductShowcase";
