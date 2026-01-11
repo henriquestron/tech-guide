@@ -1,83 +1,63 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import puppeteerCore from "puppeteer-core";
-import puppeteer from "puppeteer"; 
-import chromium from "@sparticuz/chromium";
+import puppeteer from "puppeteer";
 
-// --- CONFIGURAÇÕES DO NEXT.JS (ISSO EVITA O ERRO DE BUILD) ---
-// Diz ao Next.js: "Não tente rodar isso no build, é dinâmico!"
-export const dynamic = 'force-dynamic'; 
-export const maxDuration = 60; // Aumenta tempo limite na Vercel
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Configurações para o Next.js não cachear
+export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   let browser = null;
 
   try {
-    // 1. VERIFICAÇÃO DE SEGURANÇA (DENTRO DA FUNÇÃO)
-    // Se as chaves não existirem, ele para aqui e não quebra o build
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-       return NextResponse.json({ error: "Supabase Keys faltando na Vercel!" }, { status: 500 });
-    }
-    
+    // 1. Verificação de Chaves
     if (!process.env.GEMINI_API_KEY) {
-       return NextResponse.json({ error: "Gemini Key faltando na Vercel!" }, { status: 500 });
+       return NextResponse.json({ error: "Gemini API Key não configurada" }, { status: 500 });
+    }
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+       return NextResponse.json({ error: "Supabase URL não configurada" }, { status: 500 });
     }
 
-    // --- CONEXÃO SUPABASE (AGORA AQUI DENTRO) ---
-    // Movido para cá para evitar o erro "supabaseUrl is required" no build
+    // 2. Conexões
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
-
-    // --- CONEXÃO GEMINI ---
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const body = await req.json();
-    const { termo, categoria } = body;
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-    console.log(`\n🤖 ROBÔ INICIADO - Termo: "${termo}"`);
+    const body = await req.json();
+    const { termo, categoria } = body;
 
-    // --- LÓGICA DO NAVEGADOR (VERCEL vs LOCAL) ---
-    let launchOptions;
-    let puppeteerInstance;
+    console.log(`\n🤖 ROBÔ RENDER - Iniciando busca: "${termo}"`);
 
-    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
-      console.log("☁️ Modo NUVEM (Chromium)");
-      chromium.setGraphicsMode = false;
-      
-      puppeteerInstance = puppeteerCore;
-      launchOptions = {
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true,
-      };
-    } else {
-      console.log("💻 Modo LOCAL (Chrome)");
-      puppeteerInstance = puppeteer;
-      launchOptions = {
-        headless: false,
-        args: ["--start-maximized", "--no-sandbox"],
-        defaultViewport: null,
-      };
-    }
+    // 3. Inicia o Puppeteer (Modo Servidor Docker)
+    browser = await puppeteer.launch({
+      headless: "new", // Modo sem interface gráfica (obrigatório em servidor)
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage", // Importante para evitar crash de memória no Docker
+        "--disable-gpu"
+      ]
+    });
 
-    browser = await puppeteerInstance.launch(launchOptions);
     const page = await browser.newPage();
-    
+    // User Agent para não parecer robô
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
     const url = `https://lista.mercadolivre.com.br/${termo.replace(/ /g, "-")}_NoIndex_True`;
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
     
+    // Timeout generoso (60s)
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+    
+    // Scroll para carregar imagens
     await page.evaluate(() => window.scrollBy(0, 500));
-    await delay(1000);
+    
+    // Função de delay simples
+    await new Promise(r => setTimeout(r, 2000));
 
+    // --- SCRAPING (Igual ao anterior) ---
     const listaProdutos = await page.evaluate(() => {
       const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
       let elements = [];
@@ -88,7 +68,7 @@ export async function POST(req) {
 
       const itensValidos = [];
       const linksVistos = new Set();
-      const limite = 5;
+      const limite = 5; // Pode aumentar no Render se quiser
 
       for (const item of elements) {
         if (itensValidos.length >= limite) break;
@@ -125,10 +105,10 @@ export async function POST(req) {
       return itensValidos;
     });
 
-    console.log(`🎯 Puppeteer encontrou: ${listaProdutos.length}`);
+    console.log(`🎯 Encontrados: ${listaProdutos.length}`);
     await browser.close();
 
-    // --- GEMINI & SALVAMENTO ---
+    // --- GEMINI (IA) ---
     let salvos = 0;
     for (const produto of listaProdutos) {
       let dadosReview = {
@@ -164,14 +144,15 @@ export async function POST(req) {
       }]);
 
       if (!error) salvos++;
-      await delay(500); 
+      // Delay curto
+      await new Promise(r => setTimeout(r, 500));
     }
 
-    return NextResponse.json({ success: true, message: `${salvos} salvos.` });
+    return NextResponse.json({ success: true, message: `${salvos} produtos processados no Render.` });
 
   } catch (error) {
     if (browser) await browser.close();
-    console.error("🚨 Erro:", error);
+    console.error("🚨 Erro Fatal:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
