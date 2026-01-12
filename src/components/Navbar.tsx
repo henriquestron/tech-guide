@@ -4,7 +4,7 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Menu, X, Smartphone, Monitor, Cpu, Watch, Gamepad2, Headphones, 
-  Search, Heart, ChevronDown 
+  Search, Heart, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useFavorites } from "@/context/FavoritesContext";
 
@@ -27,7 +27,6 @@ const categories: CategoryItem[] = [
       { name: 'iPhone (iOS)', slug: 'iphone' },
     ]
   },
-
   { 
     name: 'Notebooks', 
     href: '/notebooks', 
@@ -38,7 +37,6 @@ const categories: CategoryItem[] = [
       { name: 'Acessórios para Notebook', slug: 'acessorios' },
     ]
   },
-
   { 
     name: 'Peças PC', 
     href: '/pecas', 
@@ -50,7 +48,6 @@ const categories: CategoryItem[] = [
       { name: 'Armazenamento', slug: 'ssd-hd' },
     ]
   },
-
   { 
     name: 'Relógios', 
     href: '/relogios', 
@@ -61,7 +58,6 @@ const categories: CategoryItem[] = [
       { name: 'Pulseiras & Acessórios', slug: 'acessorios' },
     ]
   },
-
   { 
     name: 'Games', 
     href: '/games', 
@@ -73,7 +69,6 @@ const categories: CategoryItem[] = [
       { name: 'Acessórios Gamer', slug: 'acessorios' },
     ]
   },
-
   { 
     name: 'Acessórios', 
     href: '/acessorios', 
@@ -89,6 +84,9 @@ const categories: CategoryItem[] = [
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // Estado para controlar qual categoria está expandida no mobile
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
   const router = useRouter();
   const { favorites } = useFavorites();
 
@@ -97,6 +95,14 @@ export default function Navbar() {
     if (searchQuery.trim()) {
       setIsOpen(false);
       router.push(`/busca?q=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
+  const toggleCategory = (categoryName: string) => {
+    if (expandedCategory === categoryName) {
+      setExpandedCategory(null);
+    } else {
+      setExpandedCategory(categoryName);
     }
   };
 
@@ -124,37 +130,42 @@ export default function Navbar() {
             <input
               type="text"
               placeholder="Buscar produtos..."
-              className="w-full pl-10 pr-4 py-2 rounded-full bg-zinc-100 dark:bg-zinc-900 border-none focus:ring-2 focus:ring-blue-500 text-sm outline-none"
+              className="w-full pl-10 pr-4 py-2 rounded-full bg-zinc-100 dark:bg-zinc-900 border-none focus:ring-2 focus:ring-blue-500 text-sm outline-none transition-all"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             <Search className="absolute left-3 top-2.5 text-zinc-400" size={18} />
           </form>
 
-          {/* Menu Desktop */}
-          <div className="hidden md:flex space-x-2 lg:space-x-4 items-center h-full">
+          {/* Menu Desktop (Corrigido: Alinhamento Centralizado) */}
+          <div className="hidden md:flex items-center h-full gap-1">
             {categories.map((cat) => (
-              <div key={cat.name} className="relative group h-full flex items-center">
+              <div key={cat.name} className="relative group h-full">
                 <Link
                   href={cat.href}
-                  className="flex flex-col items-center gap-1 px-3 py-2 text-[10px] uppercase font-bold text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  className="flex flex-col items-center justify-center h-full px-3 py-1 text-[11px] font-bold text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors gap-1"
                 >
-                  {cat.icon}
-                  <span className="hidden lg:flex items-center gap-1">
+                  {/* Ícone Centralizado */}
+                  <div className="mb-0.5 text-zinc-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    {cat.icon}
+                  </div>
+
+                  {/* Texto + Setinha */}
+                  <span className="flex items-center gap-0.5 uppercase tracking-wide leading-none text-center whitespace-nowrap">
                     {cat.name}
-                    {cat.subcategories && <ChevronDown size={12} />}
+                    {cat.subcategories && <ChevronDown size={10} strokeWidth={3} />}
                   </span>
                 </Link>
 
-                {/* Dropdown */}
+                {/* Dropdown Desktop */}
                 {cat.subcategories && (
-                  <div className="absolute top-[95%] left-1/2 -translate-x-1/2 w-56 pt-2 hidden group-hover:block">
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-100 dark:border-zinc-800 overflow-hidden py-1">
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-56 pt-0 hidden group-hover:block z-50">
+                    <div className="mt-1 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-100 dark:border-zinc-800 overflow-hidden py-1">
                       {cat.subcategories.map((sub) => (
                         <Link
                           key={sub.slug}
                           href={`${cat.href}?sub=${sub.slug}`}
-                          className="block px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-blue-600"
+                          className="block px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-blue-600 text-left capitalize font-medium"
                         >
                           {sub.name}
                         </Link>
@@ -191,10 +202,10 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Menu Mobile */}
+      {/* Menu Mobile (Corrigido: Accordion/Sanfona) */}
       {isOpen && (
         <div className="md:hidden bg-white dark:bg-zinc-950 border-t border-zinc-100 dark:border-zinc-900 absolute w-full shadow-xl h-[calc(100vh-64px)] overflow-y-auto">
-          <div className="p-4">
+          <div className="p-4 pb-20">
 
             <form onSubmit={handleSearch} className="relative mb-6">
               <input
@@ -207,25 +218,43 @@ export default function Navbar() {
               <Search className="absolute left-3 top-3.5 text-zinc-400" size={20} />
             </form>
 
-            <div className="space-y-4">
+            <div className="space-y-2">
               {categories.map((cat) => (
-                <div key={cat.name} className="space-y-2">
-                  <Link
-                    href={cat.href}
-                    className="flex items-center gap-3 px-3 py-2 rounded-md font-bold text-zinc-800 dark:text-white bg-zinc-50 dark:bg-zinc-900"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    {cat.icon}
-                    {cat.name}
-                  </Link>
+                <div key={cat.name} className="flex flex-col bg-zinc-50 dark:bg-zinc-900/50 rounded-lg overflow-hidden">
+                  
+                  {/* Cabeçalho da Categoria Mobile */}
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <Link
+                      href={cat.href}
+                      className="flex items-center gap-3 font-bold text-zinc-800 dark:text-white flex-1"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      {cat.icon}
+                      {cat.name}
+                    </Link>
+                    
+                    {/* Botão de Expandir (Só aparece se tiver subcategorias) */}
+                    {cat.subcategories && (
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault(); 
+                          toggleCategory(cat.name);
+                        }}
+                        className="p-2 text-zinc-400 hover:text-blue-600"
+                      >
+                         {expandedCategory === cat.name ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </button>
+                    )}
+                  </div>
 
-                  {cat.subcategories && (
-                    <div className="pl-10 grid grid-cols-2 gap-2">
+                  {/* Subcategorias (Efeito Sanfona) */}
+                  {cat.subcategories && expandedCategory === cat.name && (
+                    <div className="bg-zinc-100 dark:bg-zinc-950 px-4 py-2 space-y-2 border-t border-zinc-200 dark:border-zinc-800 animate-in slide-in-from-top-2 duration-200">
                       {cat.subcategories.map((sub) => (
                         <Link
                           key={sub.slug}
                           href={`${cat.href}?sub=${sub.slug}`}
-                          className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-blue-600"
+                          className="block py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-blue-600 border-l-2 border-transparent hover:border-blue-600 pl-3"
                           onClick={() => setIsOpen(false)}
                         >
                           {sub.name}

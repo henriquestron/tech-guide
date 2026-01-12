@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { ChevronRight, Filter } from "lucide-react";
+import { ChevronRight, Filter, ChevronDown, ChevronUp, X } from "lucide-react";
 
 // --- CONFIGURAÇÃO DAS SUBCATEGORIAS ---
 const subcategoryOptions: Record<string, { label: string; slug: string }[]> = {
@@ -72,6 +72,9 @@ export default function FilterSidebar({
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
+  // Estados Mobile
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
   // --- NORMALIZAÇÃO DO SLUG ---
   const normalizedCategory = useMemo(() => {
     const slug = categorySlug?.toLowerCase();
@@ -80,7 +83,7 @@ export default function FilterSidebar({
 
   const subOptions = subcategoryOptions[normalizedCategory];
 
-  // Estados
+  // Estados de Filtro
   const [priceRange, setPriceRange] = useState([0, 10000]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [minRating, setMinRating] = useState(0);
@@ -107,6 +110,8 @@ export default function FilterSidebar({
     }
 
     router.push(`${pathname}?${params.toString()}`);
+    // Opcional: fechar filtro mobile ao selecionar
+    // setIsMobileOpen(false); 
   };
 
   const clearSubcategory = () => {
@@ -122,117 +127,132 @@ export default function FilterSidebar({
   };
 
   return (
-    <aside className="w-full h-fit space-y-6">
+    <div className="w-full">
+      {/* Botão Mobile para Abrir/Fechar Filtros */}
+      <button 
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+        className="md:hidden w-full mb-4 flex items-center justify-between px-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-sm"
+      >
+        <span className="flex items-center gap-2 font-bold text-zinc-700 dark:text-zinc-200">
+          <Filter size={18} /> Filtros e Categorias
+        </span>
+        {isMobileOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+      </button>
 
-      {/* CATEGORIAS / SUBCATEGORIAS */}
-      {subOptions && (
-        <div className="p-4 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <h3 className="font-bold text-lg mb-4 text-zinc-900 dark:text-white">
-            Categorias
-          </h3>
+      {/* Container Principal - Escondido no mobile se !isMobileOpen */}
+      <aside className={`${isMobileOpen ? 'block' : 'hidden'} md:block w-full h-fit space-y-6`}>
 
-          <div className="space-y-1">
-            <button
-              onClick={clearSubcategory}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm flex justify-between ${
-                !currentSub
-                  ? "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              Ver Todos
-              {!currentSub && <ChevronRight size={14} />}
-            </button>
+        {/* CATEGORIAS / SUBCATEGORIAS */}
+        {subOptions && (
+          <div className="p-4 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <h3 className="font-bold text-lg mb-4 text-zinc-900 dark:text-white">
+              Categorias
+            </h3>
 
-            {subOptions.map((opt) => (
+            <div className="space-y-1">
               <button
-                key={opt.slug}
-                onClick={() => handleSubcategoryClick(opt.slug)}
+                onClick={clearSubcategory}
                 className={`w-full text-left px-3 py-2 rounded-md text-sm flex justify-between ${
-                  currentSub === opt.slug
+                  !currentSub
                     ? "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium"
                     : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                 }`}
               >
-                {opt.label}
-                {currentSub === opt.slug && <ChevronRight size={14} />}
+                Ver Todos
+                {!currentSub && <ChevronRight size={14} />}
               </button>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* FILTROS */}
-      <div className="p-4 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
-        <h3 className="font-bold text-lg mb-4 text-zinc-900 dark:text-white flex items-center gap-2">
-          <Filter size={18} /> Filtros
-        </h3>
-
-        {/* Preço */}
-        <div className="mb-6">
-          <h4 className="text-sm font-semibold mb-2 text-zinc-500 uppercase">
-            Preço Máximo
-          </h4>
-          <div className="flex justify-between text-sm mb-2">
-            <span>R$ 0</span>
-            <span>R$ {priceRange[1]}</span>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="10000"
-            step="100"
-            value={priceRange[1]}
-            onChange={(e) => setPriceRange([0, Number(e.target.value)])}
-            className="w-full accent-blue-600"
-          />
-        </div>
-
-        {/* Marcas */}
-        {brands.length > 0 && (
-          <div className="mb-6">
-            <h4 className="text-sm font-semibold mb-2 text-zinc-500 uppercase">
-              Marcas
-            </h4>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {brands.map((brand) => (
-                <label key={brand} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedBrands.includes(brand)}
-                    onChange={() => toggleBrand(brand)}
-                  />
-                  {brand}
-                </label>
+              {subOptions.map((opt) => (
+                <button
+                  key={opt.slug}
+                  onClick={() => handleSubcategoryClick(opt.slug)}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm flex justify-between ${
+                    currentSub === opt.slug
+                      ? "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium"
+                      : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  {opt.label}
+                  {currentSub === opt.slug && <ChevronRight size={14} />}
+                </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Avaliação */}
-        <div>
-          <h4 className="text-sm font-semibold mb-2 text-zinc-500 uppercase">
-            Avaliação Mínima
-          </h4>
-          <div className="flex gap-2">
-            {[3, 4, 5].map((star) => (
-              <button
-                key={star}
-                onClick={() =>
-                  setMinRating((prev) => (prev === star ? 0 : star))
-                }
-                className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                  minRating === star
-                    ? "bg-yellow-400 border-yellow-500 text-black"
-                    : "border-zinc-300"
-                }`}
-              >
-                {star}+ ⭐
-              </button>
-            ))}
+        {/* FILTROS */}
+        <div className="p-4 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <h3 className="font-bold text-lg mb-4 text-zinc-900 dark:text-white flex items-center gap-2">
+            <Filter size={18} /> Filtros
+          </h3>
+
+          {/* Preço */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold mb-2 text-zinc-500 uppercase">
+              Preço Máximo
+            </h4>
+            <div className="flex justify-between text-sm mb-2">
+              <span>R$ 0</span>
+              <span>R$ {priceRange[1]}</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="10000"
+              step="100"
+              value={priceRange[1]}
+              onChange={(e) => setPriceRange([0, Number(e.target.value)])}
+              className="w-full accent-blue-600 h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* Marcas */}
+          {brands.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold mb-2 text-zinc-500 uppercase">
+                Marcas
+              </h4>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                {brands.map((brand) => (
+                  <label key={brand} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 p-1 rounded">
+                    <input
+                      type="checkbox"
+                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                      checked={selectedBrands.includes(brand)}
+                      onChange={() => toggleBrand(brand)}
+                    />
+                    {brand}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Avaliação */}
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-zinc-500 uppercase">
+              Avaliação Mínima
+            </h4>
+            <div className="flex gap-2 flex-wrap">
+              {[3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() =>
+                    setMinRating((prev) => (prev === star ? 0 : star))
+                  }
+                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                    minRating === star
+                      ? "bg-yellow-400 border-yellow-500 text-black shadow-sm"
+                      : "border-zinc-300 text-zinc-600 hover:border-zinc-400"
+                  }`}
+                >
+                  {star}+ ⭐
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </div>
   );
 }
