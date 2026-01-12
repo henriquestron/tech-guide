@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     `;
 
     // 3. CHAMAR O GEMINI
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
     
     console.log("🤖 Enviando prompt para o Gemini (Hardcoded)...");
     const result = await model.generateContent(SYSTEM_PROMPT);
