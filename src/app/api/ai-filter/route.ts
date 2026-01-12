@@ -3,28 +3,27 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabaseClient";
 
 export async function POST(req: Request) {
-  // --- INÍCIO DO BLOCO DE DEBUG ---
-  const apiKey = process.env.GEMINI_API_KEY;
   
-  console.log("--- DEBUG IA START ---");
-  
-  if (!apiKey) {
-    console.error("❌ ERRO CRÍTICO: A variável GEMINI_API_KEY está vazia (undefined) no servidor!");
-    return NextResponse.json({ error: "Configuração de API Key ausente. Verifique as variáveis de ambiente na Vercel." }, { status: 500 });
-  } else {
-    // Mostra os 4 primeiros caracteres para você confirmar se é a chave certa (sem vazar a senha toda)
-    console.log(`✅ Variável de ambiente detectada. Inicia com: ${apiKey.substring(0, 4)}... (Total de caracteres: ${apiKey.length})`);
-  }
-  // --- FIM DO BLOCO DE DEBUG ---
+  // =====================================================================
+  // ☢️ ZONA DE TESTE NUCLEAR (DEBUG) ☢️
+  // Cole sua chave dentro das aspas abaixo para testar se o problema é a Vercel
+  const apiKey = "AIzaSyDxXEDMBkDhscgKlFS2OfmJG_K-AxQXV3Y"; 
+  // =====================================================================
 
-  // Inicializa o Gemini aqui dentro para garantir que usamos a chave verificada
+  console.log("--- DEBUG TESTE HARDCODED ---");
+
+  if (!apiKey || apiKey === "AIzaSyDxXEDMBkDhscgKlFS2OfmJG_K-AxQXV3Y") {
+     console.error("❌ Você esqueceu de colar a chave no código!");
+     return NextResponse.json({ error: "Chave de teste não configurada." }, { status: 500 });
+  }
+
+  // Inicializa o Gemini com a chave fixa
   const genAI = new GoogleGenerativeAI(apiKey);
 
   try {
     const { message } = await req.json();
 
     // 1. BUSCAR PRODUTOS NO SUPABASE
-    // (Mantive short_description com underline pq é assim que está no seu banco)
     const { data: products, error } = await supabase
       .from('products')
       .select('id, title, price, category, subcategory, brand, short_description, rating')
@@ -39,8 +38,6 @@ export async function POST(req: Request) {
       console.warn("⚠️ A busca no Supabase retornou 0 produtos.");
       return NextResponse.json({ recommendations: [] });
     }
-
-    console.log(`📦 Produtos recuperados do banco: ${products.length}`);
 
     // 2. PREPARAR O CONTEXTO PARA A IA
     const catalogContext = products.map((p: any) => 
@@ -80,10 +77,9 @@ export async function POST(req: Request) {
     `;
 
     // 3. CHAMAR O GEMINI
-    // Usando o modelo flash que é mais rápido e grátis
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
-    console.log("🤖 Enviando prompt para o Gemini...");
+    console.log("🤖 Enviando prompt para o Gemini (Hardcoded)...");
     const result = await model.generateContent(SYSTEM_PROMPT);
     const response = await result.response;
     let text = response.text();
@@ -99,7 +95,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('❌ Erro durante execução da IA:', error);
-    // Retorna o erro detalhado para ajudar no debug
     return NextResponse.json({ 
       error: "Erro interno no servidor", 
       details: error.message || error 
