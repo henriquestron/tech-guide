@@ -6,7 +6,8 @@ import puppeteer from "puppeteer";
 // Configurações para o Next.js não cachear
 export const dynamic = 'force-dynamic';
 
-export async function POST(req) {
+// --- CORREÇÃO AQUI: Removido ": Request" ---
+export async function POST(req) { 
   let browser = null;
 
   try {
@@ -27,17 +28,17 @@ export async function POST(req) {
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
     const body = await req.json();
-    const { termo, categoria } = body;
+    const { termo, categoria, subcategoria } = body;
 
-    console.log(`\n🤖 ROBÔ RENDER - Iniciando busca: "${termo}"`);
+    console.log(`\n🤖 ROBÔ RENDER - Iniciando busca: "${termo}" [${categoria} > ${subcategoria || 'Geral'}]`);
 
     // 3. Inicia o Puppeteer (Modo Servidor Docker)
     browser = await puppeteer.launch({
-      headless: "new", // Modo sem interface gráfica (obrigatório em servidor)
+      headless: "new", 
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage", // Importante para evitar crash de memória no Docker
+        "--disable-dev-shm-usage", 
         "--disable-gpu"
       ]
     });
@@ -57,7 +58,7 @@ export async function POST(req) {
     // Função de delay simples
     await new Promise(r => setTimeout(r, 2000));
 
-    // --- SCRAPING (Igual ao anterior) ---
+    // --- SCRAPING ---
     const listaProdutos = await page.evaluate(() => {
       const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
       let elements = [];
@@ -68,7 +69,7 @@ export async function POST(req) {
 
       const itensValidos = [];
       const linksVistos = new Set();
-      const limite = 5; // Pode aumentar no Render se quiser
+      const limite = 5; 
 
       for (const item of elements) {
         if (itensValidos.length >= limite) break;
@@ -119,7 +120,8 @@ export async function POST(req) {
 
       try {
         const prompt = `
-          Especialista SEO. Produto: "${produto.titulo}", Preço: R$ ${produto.price}, Cat: "${categoria}".
+          Especialista SEO. Produto: "${produto.titulo}", Preço: R$ ${produto.price}.
+          Categoria: "${categoria}", Subcategoria: "${subcategoria || 'Geral'}".
           REGRAS: SEM asteriscos, SEM markdown. Texto limpo.
           JSON: { "shortDescription": "...", "rating": 4.8, "fullReview": { "verdict": "...", "pros": ["..."], "cons": ["..."], "content": "..." } }
         `;
@@ -137,6 +139,7 @@ export async function POST(req) {
         original_price: precoDe,
         link: produto.link,
         category: categoria,
+        subcategory: subcategoria || null,
         brand: "Tech",
         rating: Number(dadosReview.rating),
         short_description: dadosReview.shortDescription,
@@ -144,13 +147,12 @@ export async function POST(req) {
       }]);
 
       if (!error) salvos++;
-      // Delay curto
       await new Promise(r => setTimeout(r, 500));
     }
 
     return NextResponse.json({ success: true, message: `${salvos} produtos processados no Render.` });
 
-  } catch (error) {
+  } catch (error) { // --- CORREÇÃO AQUI: Removido ": any" ---
     if (browser) await browser.close();
     console.error("🚨 Erro Fatal:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
