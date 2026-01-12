@@ -1,12 +1,14 @@
 "use client";
+
 import Link from 'next/link';
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Menu, X, Smartphone, Monitor, Cpu, Watch, Gamepad2, Headphones, 
-  Search, Heart, ChevronDown, ChevronUp
+  Search, Heart, ChevronDown, ChevronUp, Sparkles 
 } from 'lucide-react';
 import { useFavorites } from "@/context/FavoritesContext";
+import AiSearchModal from './AiSearchModal'; // Certifique-se que o arquivo AiSearchModal.tsx está na mesma pasta
 
 // Definição da estrutura do Menu com Subcategorias
 type CategoryItem = {
@@ -86,6 +88,9 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   // Estado para controlar qual categoria está expandida no mobile
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  
+  // Estado para o Modal da IA
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
   const router = useRouter();
   const { favorites } = useFavorites();
@@ -122,22 +127,32 @@ export default function Navbar() {
             Guide
           </Link>
 
-          {/* Busca Desktop */}
-          <form
-            onSubmit={handleSearch}
-            className="hidden md:flex flex-1 max-w-md relative mx-4"
-          >
-            <input
-              type="text"
-              placeholder="Buscar produtos..."
-              className="w-full pl-10 pr-4 py-2 rounded-full bg-zinc-100 dark:bg-zinc-900 border-none focus:ring-2 focus:ring-blue-500 text-sm outline-none transition-all"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <Search className="absolute left-3 top-2.5 text-zinc-400" size={18} />
-          </form>
+          {/* Busca Desktop + Botão IA */}
+          <div className="hidden md:flex flex-1 max-w-md relative mx-4 items-center gap-2">
+            
+            {/* Input de Busca Normal */}
+            <form onSubmit={handleSearch} className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Buscar produtos..."
+                className="w-full pl-10 pr-4 py-2 rounded-full bg-zinc-100 dark:bg-zinc-900 border-none focus:ring-2 focus:ring-blue-500 text-sm outline-none transition-all"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <Search className="absolute left-3 top-2.5 text-zinc-400" size={18} />
+            </form>
 
-          {/* Menu Desktop (Corrigido: Alinhamento Centralizado) */}
+            {/* Botão Assistente IA */}
+            <button
+              onClick={() => setIsAiModalOpen(true)}
+              className="p-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all tooltip flex-shrink-0"
+              title="Busca com Inteligência Artificial"
+            >
+              <Sparkles size={18} />
+            </button>
+          </div>
+
+          {/* Menu Desktop (Centralizado) */}
           <div className="hidden md:flex items-center h-full gap-1">
             {categories.map((cat) => (
               <div key={cat.name} className="relative group h-full">
@@ -202,21 +217,35 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Menu Mobile (Corrigido: Accordion/Sanfona) */}
+      {/* Menu Mobile (Accordion/Sanfona) */}
       {isOpen && (
         <div className="md:hidden bg-white dark:bg-zinc-950 border-t border-zinc-100 dark:border-zinc-900 absolute w-full shadow-xl h-[calc(100vh-64px)] overflow-y-auto">
           <div className="p-4 pb-20">
 
-            <form onSubmit={handleSearch} className="relative mb-6">
-              <input
-                type="text"
-                placeholder="O que você procura?"
-                className="w-full pl-10 pr-4 py-3 rounded-lg bg-zinc-100 dark:bg-zinc-900 border-none outline-none"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <Search className="absolute left-3 top-3.5 text-zinc-400" size={20} />
-            </form>
+            <div className="relative mb-6 flex gap-2">
+               {/* Busca Mobile */}
+              <form onSubmit={handleSearch} className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="O que você procura?"
+                  className="w-full pl-10 pr-4 py-3 rounded-lg bg-zinc-100 dark:bg-zinc-900 border-none outline-none"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <Search className="absolute left-3 top-3.5 text-zinc-400" size={20} />
+              </form>
+              
+              {/* Botão IA Mobile */}
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  setIsAiModalOpen(true);
+                }}
+                className="px-3 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg"
+              >
+                <Sparkles size={20} />
+              </button>
+            </div>
 
             <div className="space-y-2">
               {categories.map((cat) => (
@@ -269,6 +298,13 @@ export default function Navbar() {
           </div>
         </div>
       )}
+
+      {/* Componente Modal da IA */}
+      <AiSearchModal 
+        isOpen={isAiModalOpen} 
+        onClose={() => setIsAiModalOpen(false)} 
+      />
+
     </nav>
   );
 }
