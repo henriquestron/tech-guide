@@ -12,8 +12,8 @@ export async function POST(req: Request) {
 
   console.log("--- DEBUG TESTE HARDCODED ---");
 
-  if (!apiKey || apiKey === "AIzaSyDxXEDMBkDhscgKlFS2OfmJG_K-AxQXV3Y") {
-     console.error("❌ Você esqueceu de colar a chave no código!");
+  if (!apiKey) {
+     console.error("❌ A chave está vazia!");
      return NextResponse.json({ error: "Chave de teste não configurada." }, { status: 500 });
   }
 
