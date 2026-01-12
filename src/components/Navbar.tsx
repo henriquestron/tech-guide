@@ -2,16 +2,47 @@
 import Link from 'next/link';
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, X, Smartphone, Monitor, Cpu, Watch, Gamepad2, Headphones, Search, Heart } from 'lucide-react';
+import { 
+  Menu, X, Smartphone, Monitor, Cpu, Watch, Gamepad2, Headphones, 
+  Search, Heart, ChevronDown 
+} from 'lucide-react';
 import { useFavorites } from "@/context/FavoritesContext";
 
-const categories = [
-    { name: 'Celulares', href: '/celulares', icon: <Smartphone size={18} /> },
-    { name: 'Notebooks', href: '/notebooks', icon: <Monitor size={18} /> },
-    { name: 'Peças PC', href: '/pecas', icon: <Cpu size={18} /> },
-    { name: 'Relógios', href: '/relogios', icon: <Watch size={18} /> },
-    { name: 'Games', href: '/games', icon: <Gamepad2 size={18} /> },
-    { name: 'Acessórios', href: '/acessorios', icon: <Headphones size={18} /> },
+// Definição da estrutura do Menu com Subcategorias
+type CategoryItem = {
+  name: string;
+  href: string;
+  icon: React.ReactNode;
+  subcategories?: { name: string; slug: string }[];
+};
+
+// Configuração das Categorias e Subcategorias
+const categories: CategoryItem[] = [
+  { name: 'Celulares', href: '/celulares', icon: <Smartphone size={18} /> },
+  { name: 'Notebooks', href: '/notebooks', icon: <Monitor size={18} /> },
+  { 
+    name: 'Peças PC', 
+    href: '/pecas', 
+    icon: <Cpu size={18} />,
+    subcategories: [
+      { name: 'Processadores', slug: 'processador' },
+      { name: 'Placas de Vídeo', slug: 'placa-video' },
+      { name: 'Memória RAM', slug: 'memoria-ram' },
+      { name: 'Armazenamento', slug: 'ssd-hd' },
+    ]
+  },
+  { name: 'Relógios', href: '/relogios', icon: <Watch size={18} /> },
+  { name: 'Games', href: '/games', icon: <Gamepad2 size={18} /> },
+  { 
+    name: 'Acessórios', 
+    href: '/acessorios', 
+    icon: <Headphones size={18} />,
+    subcategories: [
+      { name: 'Mouses', slug: 'mouse' },
+      { name: 'Teclados', slug: 'teclado' },
+      { name: 'Headsets', slug: 'headset' },
+    ]
+  },
 ];
 
 export default function Navbar() {
@@ -50,26 +81,43 @@ export default function Navbar() {
                         <Search className="absolute left-3 top-2.5 text-zinc-400" size={18} />
                     </form>
 
-                    {/* 3. Menu de Links (Apenas Desktop) */}
-                    <div className="hidden md:flex space-x-4 lg:space-x-6 items-center">
+                    {/* 3. Menu de Links (Desktop com Dropdown) */}
+                    <div className="hidden md:flex space-x-2 lg:space-x-4 items-center h-full">
                         {categories.map((cat) => (
-                            <Link
-                                key={cat.name}
-                                href={cat.href}
-                                className="flex flex-col items-center gap-1 text-[10px] uppercase font-bold text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                                title={cat.name}
-                            >
-                                {cat.icon}
-                                <span className="hidden lg:inline">{cat.name}</span>
-                            </Link>
+                            <div key={cat.name} className="relative group h-full flex items-center">
+                                <Link
+                                    href={cat.href}
+                                    className="flex flex-col items-center gap-1 px-3 py-2 text-[10px] uppercase font-bold text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                >
+                                    {cat.icon}
+                                    <span className="hidden lg:flex items-center gap-1">
+                                        {cat.name}
+                                        {cat.subcategories && <ChevronDown size={12} />}
+                                    </span>
+                                </Link>
+
+                                {/* Dropdown Menu (Só aparece se tiver subcategorias) */}
+                                {cat.subcategories && (
+                                    <div className="absolute top-[95%] left-1/2 -translate-x-1/2 w-48 pt-2 hidden group-hover:block hover:block">
+                                        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-100 dark:border-zinc-800 overflow-hidden py-1">
+                                            {cat.subcategories.map((sub) => (
+                                                <Link
+                                                    key={sub.slug}
+                                                    href={`${cat.href}?sub=${sub.slug}`} // Passa a subcategoria via URL
+                                                    className="block px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-blue-600"
+                                                >
+                                                    {sub.name}
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         ))}
                     </div>
 
-                    {/* 4. Área de Ações (Favoritos + Botão Mobile) */}
-                    {/* Criei esta div para agrupar tudo o que fica na direita */}
+                    {/* 4. Área de Ações */}
                     <div className="flex items-center gap-2 sm:gap-4">
-                        
-                        {/* Botão de Favoritos (Visível sempre) */}
                         <Link href="/favoritos" className="relative p-2 text-zinc-500 hover:text-red-500 transition-colors">
                             <Heart size={22} />
                             {favorites.length > 0 && (
@@ -79,7 +127,6 @@ export default function Navbar() {
                             )}
                         </Link>
 
-                        {/* Botão Hambúrguer (Apenas Mobile) */}
                         <div className="md:hidden">
                             <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-zinc-600 dark:text-zinc-300">
                                 {isOpen ? <X /> : <Menu />}
@@ -92,10 +139,9 @@ export default function Navbar() {
 
             {/* Mobile Menu Dropdown */}
             {isOpen && (
-                <div className="md:hidden bg-white dark:bg-zinc-950 border-t border-zinc-100 dark:border-zinc-900 absolute w-full shadow-xl">
+                <div className="md:hidden bg-white dark:bg-zinc-950 border-t border-zinc-100 dark:border-zinc-900 absolute w-full shadow-xl h-[calc(100vh-64px)] overflow-y-auto">
                     <div className="p-4">
-                        {/* Busca Mobile */}
-                        <form onSubmit={handleSearch} className="relative mb-4">
+                        <form onSubmit={handleSearch} className="relative mb-6">
                             <input
                                 type="text"
                                 placeholder="O que você procura?"
@@ -106,17 +152,34 @@ export default function Navbar() {
                             <Search className="absolute left-3 top-3.5 text-zinc-400" size={20} />
                         </form>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-4">
                             {categories.map((cat) => (
-                                <Link
-                                    key={cat.name}
-                                    href={cat.href}
-                                    className="flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-900 border border-transparent hover:border-zinc-200"
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    {cat.icon}
-                                    {cat.name}
-                                </Link>
+                                <div key={cat.name} className="space-y-2">
+                                    <Link
+                                        href={cat.href}
+                                        className="flex items-center gap-3 px-3 py-2 rounded-md font-bold text-zinc-800 dark:text-white bg-zinc-50 dark:bg-zinc-900"
+                                        onClick={() => setIsOpen(false)}
+                                    >
+                                        {cat.icon}
+                                        {cat.name}
+                                    </Link>
+                                    
+                                    {/* Subcategorias no Mobile (Lista Simples abaixo) */}
+                                    {cat.subcategories && (
+                                        <div className="pl-10 grid grid-cols-2 gap-2">
+                                            {cat.subcategories.map((sub) => (
+                                                <Link
+                                                    key={sub.slug}
+                                                    href={`${cat.href}?sub=${sub.slug}`}
+                                                    className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-blue-600"
+                                                    onClick={() => setIsOpen(false)}
+                                                >
+                                                    {sub.name}
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </div>
