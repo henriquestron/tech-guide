@@ -2,32 +2,47 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabaseClient";
 
-// Configura o Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
 export async function POST(req: Request) {
+  // --- INÍCIO DO BLOCO DE DEBUG ---
+  const apiKey = process.env.GEMINI_API_KEY;
+  
+  console.log("--- DEBUG IA START ---");
+  
+  if (!apiKey) {
+    console.error("❌ ERRO CRÍTICO: A variável GEMINI_API_KEY está vazia (undefined) no servidor!");
+    return NextResponse.json({ error: "Configuração de API Key ausente. Verifique as variáveis de ambiente na Vercel." }, { status: 500 });
+  } else {
+    // Mostra os 4 primeiros caracteres para você confirmar se é a chave certa (sem vazar a senha toda)
+    console.log(`✅ Variável de ambiente detectada. Inicia com: ${apiKey.substring(0, 4)}... (Total de caracteres: ${apiKey.length})`);
+  }
+  // --- FIM DO BLOCO DE DEBUG ---
+
+  // Inicializa o Gemini aqui dentro para garantir que usamos a chave verificada
+  const genAI = new GoogleGenerativeAI(apiKey);
+
   try {
     const { message } = await req.json();
 
     // 1. BUSCAR PRODUTOS NO SUPABASE
-    // CORREÇÃO: Usando 'short_description' com underline, como está no banco
+    // (Mantive short_description com underline pq é assim que está no seu banco)
     const { data: products, error } = await supabase
       .from('products')
       .select('id, title, price, category, subcategory, brand, short_description, rating')
       .limit(50);
 
     if (error) {
-      console.error("Erro Supabase:", error);
-      // Retorna o erro detalhado no console para facilitar debugging futuro
+      console.error("❌ Erro Supabase:", error);
       return NextResponse.json({ error: "Erro ao buscar produtos: " + error.message }, { status: 500 });
     }
 
     if (!products || products.length === 0) {
+      console.warn("⚠️ A busca no Supabase retornou 0 produtos.");
       return NextResponse.json({ recommendations: [] });
     }
 
+    console.log(`📦 Produtos recuperados do banco: ${products.length}`);
+
     // 2. PREPARAR O CONTEXTO PARA A IA
-    // CORREÇÃO: Acessando p.short_description aqui também
     const catalogContext = products.map((p: any) => 
       `ID: ${p.id} | Produto: ${p.title} | Preço: R$${p.price} | Categoria: ${p.category} > ${p.subcategory || ''} | Marca: ${p.brand || 'N/A'} | Info: ${p.short_description}`
     ).join("\n");
@@ -65,10 +80,15 @@ export async function POST(req: Request) {
     `;
 
     // 3. CHAMAR O GEMINI
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    // Usando o modelo flash que é mais rápido e grátis
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    console.log("🤖 Enviando prompt para o Gemini...");
     const result = await model.generateContent(SYSTEM_PROMPT);
     const response = await result.response;
     let text = response.text();
+
+    console.log("✅ Resposta da IA recebida!");
 
     // Limpeza de segurança
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -77,8 +97,12 @@ export async function POST(req: Request) {
     
     return NextResponse.json(data);
 
-  } catch (error) {
-    console.error('Erro na IA:', error);
-    return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });
+  } catch (error: any) {
+    console.error('❌ Erro durante execução da IA:', error);
+    // Retorna o erro detalhado para ajudar no debug
+    return NextResponse.json({ 
+      error: "Erro interno no servidor", 
+      details: error.message || error 
+    }, { status: 500 });
   }
 }
