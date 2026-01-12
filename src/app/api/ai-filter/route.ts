@@ -3,21 +3,19 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabaseClient";
 
 export async function POST(req: Request) {
+  // VOLTAMOS AO MODO SEGURO: Ler da Variável de Ambiente
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  console.log("--- DEBUG IA START ---");
   
-  // =====================================================================
-  // ☢️ ZONA DE TESTE NUCLEAR (DEBUG) ☢️
-  // Cole sua chave dentro das aspas abaixo para testar se o problema é a Vercel
-  const apiKey = "AIzaSyDxXEDMBkDhscgKlFS2OfmJG_K-AxQXV3Y"; 
-  // =====================================================================
-
-  console.log("--- DEBUG TESTE HARDCODED ---");
-
   if (!apiKey) {
-     console.error("❌ A chave está vazia!");
-     return NextResponse.json({ error: "Chave de teste não configurada." }, { status: 500 });
+    console.error("❌ ERRO CRÍTICO: GEMINI_API_KEY não encontrada nas variáveis de ambiente!");
+    return NextResponse.json({ error: "Configuração de API Key ausente." }, { status: 500 });
+  } else {
+    // Log seguro: mostra só o começo para você saber que leu a chave certa
+    console.log(`✅ Chave lida da Vercel. Inicia com: ${apiKey.substring(0, 4)}...`);
   }
 
-  // Inicializa o Gemini com a chave fixa
   const genAI = new GoogleGenerativeAI(apiKey);
 
   try {
@@ -39,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ recommendations: [] });
     }
 
-    // 2. PREPARAR O CONTEXTO PARA A IA
+    // 2. PREPARAR O CONTEXTO
     const catalogContext = products.map((p: any) => 
       `ID: ${p.id} | Produto: ${p.title} | Preço: R$${p.price} | Categoria: ${p.category} > ${p.subcategory || ''} | Marca: ${p.brand || 'N/A'} | Info: ${p.short_description}`
     ).join("\n");
@@ -77,24 +75,23 @@ export async function POST(req: Request) {
     `;
 
     // 3. CHAMAR O GEMINI
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
-    console.log("🤖 Enviando prompt para o Gemini (Hardcoded)...");
+    console.log("🤖 Enviando prompt para o Gemini...");
     const result = await model.generateContent(SYSTEM_PROMPT);
     const response = await result.response;
     let text = response.text();
 
     console.log("✅ Resposta da IA recebida!");
 
-    // Limpeza de segurança
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
     const data = JSON.parse(text);
     
     return NextResponse.json(data);
 
   } catch (error: any) {
     console.error('❌ Erro durante execução da IA:', error);
+    // Se o erro for de chave inválida de novo, vai aparecer aqui no log
     return NextResponse.json({ 
       error: "Erro interno no servidor", 
       details: error.message || error 
