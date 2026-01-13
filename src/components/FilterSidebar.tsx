@@ -14,6 +14,11 @@ const subcategoryOptions: Record<string, { label: string; slug: string }[]> = {
     { label: "Armazenamento", slug: "ssd-hd" },
     { label: "Fontes", slug: "fonte" },
   ],
+  computadores: [
+    { label: "PC Gamer", slug: "pc-gamer" },
+    { label: "Home Office", slug: "home-office" },
+    { label: "All in One", slug: "all-in-one" },
+  ],
   acessorios: [
     { label: "Mouses", slug: "mouse" },
     { label: "Teclados", slug: "teclado" },

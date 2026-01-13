@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Edit3 } from 'lucide-react';
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Edit3, Sparkles } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE SUBCATEGORIAS ---
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
@@ -13,6 +13,11 @@ const subOptionsMap: Record<string, { label: string; value: string }[]> = {
     { label: 'Memória RAM', value: 'memoria-ram' },
     { label: 'Armazenamento (SSD/HD)', value: 'ssd-hd' },
     { label: 'Fontes', value: 'fonte' },
+  ],
+  computadores: [
+    { label: 'PC Gamer Completo', value: 'pc-gamer' },
+    { label: 'Home Office / Estudo', value: 'home-office' },
+    { label: 'All in One', value: 'all-in-one' },
   ],
   acessorios: [
     { label: 'Mouses', value: 'mouse' },
@@ -41,18 +46,16 @@ const subOptionsMap: Record<string, { label: string; value: string }[]> = {
   ]
 };
 
-// --- COMPONENTE DE LINHA DO PRODUTO (NOVO) ---
-// Separei para gerenciar o estado dos selects de cada linha individualmente
+// --- COMPONENTE DE LINHA DO PRODUTO ---
 function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (id: any) => void, onUpdate: () => void }) {
   const [link, setLink] = useState(product.link || '');
   const [cat, setCat] = useState(product.category || 'notebooks');
   const [sub, setSub] = useState(product.subcategory || '');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Quando muda a categoria, reseta a subcategoria se ela não pertencer à nova categoria
   const handleCatChange = (newCat: string) => {
     setCat(newCat);
-    setSub(''); // Limpa sub ao trocar categoria master
+    setSub(''); 
   };
 
   const handleSave = async () => {
@@ -62,7 +65,7 @@ function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (
       .update({ 
         link: link,
         category: cat,
-        subcategory: sub || null // Envia null se estiver vazio
+        subcategory: sub || null 
       })
       .eq('id', product.id);
 
@@ -71,7 +74,7 @@ function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (
     if (error) {
       alert("Erro ao salvar: " + error.message);
     } else {
-      onUpdate(); // Atualiza a lista pai
+      onUpdate(); 
     }
   };
 
@@ -89,10 +92,15 @@ function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (
       
       {/* Coluna Dados Principais */}
       <td className="p-3 align-top">
-        <div className="font-bold text-zinc-800 dark:text-zinc-200 text-xs mb-2 line-clamp-2" title={product.title}>
+        <div className="font-bold text-zinc-800 dark:text-zinc-200 text-xs mb-1 line-clamp-2" title={product.title}>
             {product.title}
         </div>
+        
+        {/* Mostra a Marca Detectada */}
         <div className="flex items-center gap-2 mb-2">
+             <span className="text-[10px] uppercase font-bold text-zinc-400 border border-zinc-200 dark:border-zinc-700 px-1 rounded">
+                {product.brand || "Tech"}
+             </span>
              <span className="text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800 px-1.5 py-0.5 rounded text-[10px]">
                 R$ {product.price}
              </span>
@@ -100,7 +108,6 @@ function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (
 
         {/* --- ÁREA DE EDIÇÃO DE CATEGORIA --- */}
         <div className="flex gap-1 flex-wrap">
-            {/* Select Categoria */}
             <select 
                 value={cat}
                 onChange={(e) => handleCatChange(e.target.value)}
@@ -111,7 +118,6 @@ function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (
                 ))}
             </select>
 
-            {/* Select Subcategoria */}
             <select 
                 value={sub}
                 onChange={(e) => setSub(e.target.value)}
@@ -194,6 +200,7 @@ export default function AdminPanel() {
     fetchProdutos();
   }
 
+  // --- FUNÇÃO DO ROBÔ DE BUSCA ---
   async function rodarRobo() {
     if (!termoBusca) return alert("Digite o que buscar!");
     const termos = termoBusca.split(',').map(t => t.trim()).filter(t => t !== "");
@@ -216,6 +223,48 @@ export default function AdminPanel() {
       await new Promise(r => setTimeout(r, 1000));
     }
     setLoading(false); fetchProdutos(); addLog("\n🏁 Finalizado!");
+  }
+
+  // --- NOVA FUNÇÃO: CORRIGIR CATEGORIAS COM IA ---
+  async function corrigirCategoriasIA() {
+    if (!confirm("Isso vai usar a IA para reclassificar Categoria, Subcategoria e Marca de TODOS os produtos listados abaixo. Deseja continuar?")) return;
+    
+    setLoading(true);
+    setStatusLog([]); // Limpa o log visual
+    addLog(`🔧 Iniciando correção inteligente de ${produtos.length} produtos...`);
+
+    let atualizados = 0;
+
+    for (const p of produtos) {
+        addLog(`⏳ Analisando: ${p.title.substring(0, 30)}...`);
+        
+        try {
+            const res = await fetch('/api/fix-product', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: p.id, title: p.title })
+            });
+            
+            const data = await res.json();
+            
+            if (data.success) {
+                addLog(`✅ ${data.updated.brand} | ${data.updated.category} > ${data.updated.subcategory}`);
+                atualizados++;
+            } else {
+                addLog(`❌ Erro: ${data.error}`);
+            }
+
+        } catch (err) {
+            addLog(`❌ Falha na conexão.`);
+        }
+        
+        // Pequeno delay pra não travar a API do Google (Rate Limit)
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    addLog(`🏁 Fim! ${atualizados} produtos corrigidos.`);
+    setLoading(false);
+    fetchProdutos(); // Recarrega a tabela oficial do banco
   }
 
   function addLog(msg: string) { setStatusLog(prev => [...prev, msg]); }
@@ -253,6 +302,7 @@ export default function AdminPanel() {
       </header>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* COLUNA ESQUERDA: CONTROLES */}
         <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 h-fit">
           <h2 className="font-bold text-lg mb-6 text-zinc-800 dark:text-white flex items-center gap-2"><Search size={20} className="text-blue-600"/> Configurar Busca</h2>
           <label className="block text-sm font-bold mb-2 text-zinc-600 dark:text-zinc-400">O que cadastrar?</label>
@@ -280,18 +330,32 @@ export default function AdminPanel() {
           <button onClick={rodarRobo} disabled={loading || !termoBusca} className={`w-full py-3 px-4 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg ${loading ? 'bg-zinc-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90'}`}>
             {loading ? <><Loader2 className="animate-spin" /> Processando...</> : <><Play fill="currentColor" size={18} /> Executar Robô</>}
           </button>
+          
           <div className="mt-6 bg-zinc-900 text-green-400 p-4 rounded-xl text-xs h-48 overflow-y-auto font-mono border border-zinc-800 shadow-inner custom-scrollbar">
             <div className="text-zinc-600 mb-2 pb-2 border-b border-zinc-800 font-bold">TERMINAL &gt;_</div>
             {statusLog.length === 0 ? <span className="text-zinc-600 italic">Aguardando comando...</span> : statusLog.map((l, i) => <div key={i} className="mb-1 whitespace-pre-wrap">{l}</div>)}
           </div>
         </div>
 
+        {/* COLUNA DIREITA: TABELA */}
         <div className="lg:col-span-2 bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-[800px]">
           <div className="flex flex-col sm:flex-row justify-between mb-6 items-center gap-4">
             <div>
                 <h2 className="font-bold text-lg text-zinc-800 dark:text-white flex items-center gap-2"><Save size={20} className="text-green-600"/> Gerenciar Produtos ({produtos.length})</h2>
             </div>
+            
+            {/* BOTÕES DE AÇÃO */}
             <div className="flex gap-2 w-full sm:w-auto">
+                {/* Botão Mágico de Correção */}
+                <button 
+                    onClick={corrigirCategoriasIA} 
+                    disabled={loading || produtos.length === 0}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-md"
+                    title="Usar IA para corrigir Categoria e Marca automaticamente"
+                >
+                    <Sparkles size={16} /> Corrigir Tudo
+                </button>
+
                 <button onClick={fetchProdutos} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-2 rounded-lg text-sm font-bold transition-colors"><RefreshCw size={16} /> Recarregar</button>
                 <button onClick={baixarTxt} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors"><Download size={16} /> Baixar TXT</button>
             </div>

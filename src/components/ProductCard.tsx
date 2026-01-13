@@ -1,53 +1,45 @@
 "use client";
 
-import { Product } from "@/types";
 import { Star, Eye, ShoppingCart, Heart } from "lucide-react";
-import Image from "next/image";
 import { useFavorites } from "@/context/FavoritesContext";
 
 interface ProductCardProps {
-  product: Product;
-  onOpenReview: (product: Product) => void;
+  product: any;
+  onOpenReview: (product: any) => void;
 }
 
 export default function ProductCard({ product, onOpenReview }: ProductCardProps) {
   
-  // 🛑 1. CLÁUSULA DE GUARDA (PRIMEIRA LINHA)
-  // Se o produto não existir ou for nulo, cancela o desenho do card.
   if (!product) return null;
 
   const { isFavorite, toggleFavorite } = useFavorites();
-  
-  // --- EXTRAÇÃO E TRATAMENTO DE DADOS ---
-
-  // ID Seguro
   const productId = product.id;
-  
-  // Preços Seguros (Number ou 0)
-  const price = typeof product.price === 'number' ? product.price : Number(product.price) || 0;
-  const originalPrice = typeof product.originalPrice === 'number' ? product.originalPrice : Number(product.originalPrice) || 0;
-  
-  // 🔗 2. BLINDAGEM DO LINK (A CORREÇÃO DO ERRO VERMELHO)
-  // Tenta pegar o affiliateLink ou link.
-  // @ts-ignore (Ignora erro de tipo caso sua interface não tenha todos os campos)
-  const rawLink = product.affiliateLink || product.link;
-  
-  // Verifica se é uma string válida e não vazia. Se não for, coloca "#" para o HTML não quebrar.
-  const finalLink = (typeof rawLink === 'string' && rawLink.trim() !== '') 
-    ? rawLink 
-    : "#";
 
-  // Favorito
-  const favorite = isFavorite(productId);
+  // --- TRATAMENTO DE DADOS (CRUCIAL PARA APARECER TUDO) ---
+  
+  // 1. Preços: Força converter para Numero para o cálculo funcionar
+  const price = Number(product.price) || 0;
+  // Tenta original_price (banco) ou originalPrice (legado)
+  const originalPrice = Number(product.original_price || product.originalPrice) || 0;
+  
+  // 2. Descrição: Tenta todas as fontes possíveis
+  const description = product.short_description || product.shortDescription || product.fullReview?.content || "Sem descrição.";
 
-  // Cálculo de Desconto
+  // 3. Link e Categoria
+  const link = product.link || product.affiliateLink || "#";
+  const category = product.category || "Geral";
+  const rating = Number(product.rating) || 4.5;
+
+  // 4. Cálculo do Desconto (Lógica corrigida)
   const hasDiscount = originalPrice > price;
-  const discountPercent = hasDiscount && originalPrice > 0
-    ? Math.round(((originalPrice - price) / originalPrice) * 100)
+  const discountPercent = hasDiscount 
+    ? Math.round(((originalPrice - price) / originalPrice) * 100) 
     : 0;
 
+  const favorite = isFavorite(productId);
+
   return (
-    <div className="group bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:border-blue-500 dark:hover:border-blue-500 transition-all duration-300 hover:shadow-lg flex flex-col overflow-hidden h-full relative">
+    <div className="group bg-zinc-900 rounded-xl border border-zinc-800 hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/10 flex flex-col overflow-hidden h-full relative">
       
       {/* Botão Favoritar */}
       <button 
@@ -55,92 +47,101 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
           e.stopPropagation(); 
           toggleFavorite(product);
         }}
-        className="absolute top-3 right-3 z-20 p-2 rounded-full bg-white/80 dark:bg-black/50 backdrop-blur-sm shadow-sm hover:scale-110 transition-transform group-hover:bg-white group-hover:dark:bg-black"
-        title={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+        className="absolute top-3 right-3 z-20 p-2 rounded-full bg-black/50 backdrop-blur-md shadow-sm hover:scale-110 transition-transform group-hover:bg-black"
       >
         <Heart 
-          size={20} 
+          size={18} 
           className={`transition-colors duration-300 ${favorite ? 'fill-red-500 text-red-500' : 'text-zinc-400 hover:text-red-400'}`} 
         />
       </button>
 
-      {/* Container da Imagem */}
+      {/* ÁREA DA IMAGEM */}
       <div className="relative aspect-[4/3] p-4 bg-white flex items-center justify-center overflow-hidden">
-        {hasDiscount && (
-          <div className="absolute top-3 left-3 z-20 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md">
+        
+        {/* Etiqueta de Desconto (Só aparece se tiver desconto real) */}
+        {hasDiscount && discountPercent > 0 && (
+          <div className="absolute top-3 left-3 z-20 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md animate-in fade-in zoom-in">
             {discountPercent}% OFF
           </div>
         )}
 
         <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-105">
-            <Image 
-              src={product.image || "/placeholder.png"} 
-              alt={product.title || "Produto"}
-              fill 
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-contain p-2"
-            />
+            {product.image ? (
+                <img 
+                  src={product.image} 
+                  alt={product.title || "Produto"}
+                  className="w-full h-full object-contain p-2"
+                />
+            ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl">📦</div>
+            )}
         </div>
         
-        <div className="absolute bottom-2 right-2 bg-zinc-900/90 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 z-10 shadow-sm">
+        {/* Nota flutuante */}
+        <div className="absolute bottom-2 right-2 bg-zinc-900/90 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 z-10 shadow-sm border border-zinc-700">
           <Star size={12} className="fill-yellow-400 text-yellow-400" />
-          {product.rating?.toFixed(1) || 4.5}
+          {rating.toFixed(1)}
         </div>
       </div>
 
-      {/* Conteúdo */}
-      <div className="p-5 flex-1 flex flex-col">
-        <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1 truncate">
-          {product.category || "Geral"}
+      {/* CONTEÚDO DO CARD */}
+      <div className="p-4 flex-1 flex flex-col">
+        {/* Categoria */}
+        <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1 truncate">
+          {category}
         </span>
         
-        <h3 className="font-bold text-lg leading-tight mb-2 text-zinc-800 dark:text-zinc-100 group-hover:text-blue-600 transition-colors line-clamp-2" title={product.title}>
-          {product.title || "Produto sem título"}
+        {/* Título */}
+        <h3 className="font-bold text-sm leading-tight mb-2 text-zinc-100 group-hover:text-blue-400 transition-colors line-clamp-2 min-h-[2.5rem]" title={product.title}>
+          {product.title}
         </h3>
         
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-4 h-10">
-          {product.shortDescription || "Sem descrição disponível."}
+        {/* DESCRIÇÃO (Corrigida) */}
+        <p className="text-xs text-zinc-400 line-clamp-2 mb-4 min-h-[2rem] leading-relaxed">
+          {description}
         </p>
 
-        {/* Preço */}
-        <div className="mt-auto mb-4">
+        {/* ÁREA DE PREÇO (Corrigida) */}
+        <div className="mt-auto mb-4 border-t border-zinc-800/50 pt-3">
           {hasDiscount && (
-            <span className="text-xs text-zinc-400 line-through block">
+            <span className="text-xs text-zinc-500 line-through block mb-0.5">
               De: R$ {originalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
           )}
-          <div className="flex items-end gap-2 flex-wrap">
-            <span className="text-xl font-bold text-zinc-900 dark:text-white">
-              R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-            <span className="text-xs text-green-600 font-medium mb-1 bg-green-100 dark:bg-green-900/30 px-1 rounded">
-              à vista
-            </span>
+          
+          <div className="flex items-end gap-2 flex-wrap justify-between">
+            <div className="flex flex-col">
+                <span className="text-lg font-bold text-white">
+                R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+                <span className="text-[10px] text-green-400 font-medium">
+                à vista no Pix
+                </span>
+            </div>
           </div>
         </div>
 
-        {/* Botões de Ação */}
-        <div className="flex gap-2 mt-auto">
+        {/* BOTÕES */}
+        <div className="grid grid-cols-2 gap-2 mt-auto">
           <button 
             onClick={() => onOpenReview(product)}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="flex items-center justify-center gap-2 px-3 py-2 border border-zinc-700 rounded-lg text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
           >
-            <Eye size={16} /> <span className="hidden sm:inline">Ver</span>
-            <span className="sm:inline md:hidden">Ver</span>
+            <Eye size={14} /> Análise
           </button>
           
           <a 
-            href={finalLink}
-            target={finalLink !== "#" ? "_blank" : "_self"} // Só abre nova aba se tiver link real
+            href={link}
+            target={link !== "#" ? "_blank" : "_self"} 
             rel="noopener noreferrer nofollow"
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 font-bold rounded-lg transition-colors shadow-sm hover:shadow-md 
-              ${finalLink === "#" 
-                ? "bg-gray-300 cursor-not-allowed text-gray-600" // Estilo desabilitado se não tiver link
-                : "bg-yellow-400 hover:bg-yellow-500 text-zinc-900 active:scale-95 transform duration-100"
+            className={`flex items-center justify-center gap-2 px-3 py-2 font-bold rounded-lg transition-colors shadow-sm hover:shadow-md text-xs
+              ${link === "#" 
+                ? "bg-zinc-800 cursor-not-allowed text-zinc-600" 
+                : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20"
               }`}
           >
-            <ShoppingCart size={18} />
-            <span>Comprar</span>
+            <ShoppingCart size={14} />
+            Comprar
           </a>
         </div>
       </div>

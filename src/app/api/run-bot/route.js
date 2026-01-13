@@ -3,7 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import puppeteer from "puppeteer";
 
-// Configurações para o Next.js não cachear
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) { 
@@ -19,33 +18,28 @@ export async function POST(req) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
     
-    // Usando a versão flash conforme solicitado
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
     const body = await req.json();
-    // Recebe o limite do front (padrão 3 se não vier nada)
     const { termo, categoria, subcategoria, limit = 3 } = body; 
 
     console.log(`\n🤖 ROBÔ - Recebido: "${termo}" | Limite: ${limit}`);
 
-    // --- NOVO: BUSCA INTELIGENTE COM IA ---
-    // A IA traduz "pc que roda gta" para "pc gamer i5 16gb placa video"
+    // --- BUSCA INTELIGENTE ---
     let termoDeBusca = termo;
     try {
         const promptSearch = `
         Atue como um especialista em busca do Mercado Livre.
         O usuário digitou: "${termo}".
-        Converta isso em um termo de busca OTIMIZADO e TÉCNICO para encontrar os melhores produtos.
-        Exemplo: "pc que roda tudo" -> "pc gamer completo i7 rtx"
-        Exemplo: "mouse pra jogar cs" -> "mouse gamer logitech 12000dpi"
-        Responda APENAS o termo novo, sem aspas, sem explicações.
+        Converta isso em um termo de busca OTIMIZADO e TÉCNICO.
+        Responda APENAS o termo novo, sem aspas.
         `;
         const resultSearch = await model.generateContent(promptSearch);
         termoDeBusca = resultSearch.response.text().trim();
         console.log(`🧠 IA traduziu "${termo}" para -> "${termoDeBusca}"`);
     } catch (e) {
-        console.log("Falha na tradução da busca, usando termo original.");
+        console.log("Uso do termo original.");
     }
 
     // 2. Inicia o Puppeteer
@@ -57,7 +51,6 @@ export async function POST(req) {
     const page = await browser.newPage();
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-    // Usa o termo otimizado pela IA na URL
     const url = `https://lista.mercadolivre.com.br/${termoDeBusca.replace(/ /g, "-")}_NoIndex_True`;
     
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
@@ -65,7 +58,7 @@ export async function POST(req) {
     await new Promise(r => setTimeout(r, 2000));
 
     // --- SCRAPING ---
-    const listaProdutos = await page.evaluate((limiteMax) => { // Passamos o limite pra dentro do navegador
+    const listaProdutos = await page.evaluate((limiteMax) => { 
       const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
       let elements = [];
       for (const sel of seletores) {
@@ -77,7 +70,7 @@ export async function POST(req) {
       const linksVistos = new Set();
       
       for (const item of elements) {
-        if (itensValidos.length >= limiteMax) break; // Usa o limite dinâmico
+        if (itensValidos.length >= limiteMax) break;
         
         const linkEl = item.querySelector('a');
         if (!linkEl) continue;
@@ -92,7 +85,6 @@ export async function POST(req) {
         let currentPrice = 0;
         let originalPrice = 0;
         
-        // Lógica de preço (mantida igual)
         const previousContainer = item.querySelector('.andes-money-amount--previous');
         if (previousContainer) {
             const prevVal = previousContainer.querySelector('.andes-money-amount__fraction');
@@ -108,35 +100,83 @@ export async function POST(req) {
         let titulo = titleEl ? titleEl.innerText.trim() : "";
         let imagem = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || "") : "";
 
+        // Captura de Avaliação
+        let ratingScraped = 0;
+        const ratingEl = item.querySelector('.ui-search-reviews__rating-number') || 
+                         item.querySelector('.poly-reviews__rating') ||
+                         item.querySelector('.andes-visually-hidden'); 
+        
+        if (ratingEl) {
+            const text = ratingEl.innerText.trim();
+            const match = text.match(/([0-5][.,][0-9])/);
+            if (match) ratingScraped = parseFloat(match[0].replace(',', '.'));
+        }
+
         if (titulo && currentPrice > 0) {
-            itensValidos.push({ titulo, price: currentPrice, originalPrice, image: imagem, link: linkLimpo });
+            itensValidos.push({ titulo, price: currentPrice, originalPrice, image: imagem, link: linkLimpo, ratingScraped });
         }
       }
       return itensValidos;
-    }, limit); // Passa o 'limit' como argumento para a função evaluate
+    }, limit);
 
-    console.log(`🎯 Encontrados: ${listaProdutos.length} produtos (Limite pedido: ${limit})`);
+    console.log(`🎯 Encontrados: ${listaProdutos.length} produtos`);
     await browser.close();
 
-    // --- GEMINI (Gerar Reviews) ---
+    // --- GEMINI (Gerar Reviews e Identificar Marca) ---
     let salvos = 0;
     for (const produto of listaProdutos) {
+      
+      const finalRating = produto.ratingScraped > 0 ? produto.ratingScraped : 4.5;
+
+      // Objeto padrão caso a IA falhe
       let dadosReview = {
+         brand: "Genérico", // Padrão
          shortDescription: `Oferta: ${produto.titulo}`,
-         rating: 4.5,
+         rating: finalRating,
          fullReview: { verdict: "Recomendado", pros: ["Custo-benefício"], cons: ["Verificar frete"], content: "Análise baseada nas especificações." }
       };
 
       try {
+        // --- 🧠 O PULO DO GATO AQUI ---
+        // Pedi para a IA extrair a marca ("brand") do título
+        // ATUALIZAÇÃO AQUI: Adicionei a lista de categorias no prompt para a IA não se perder
         const prompt = `
-          Especialista Tech. Produto: "${produto.titulo}", Preço: R$ ${produto.price}.
-          Categoria: "${categoria}", Subcategoria: "${subcategoria || 'Geral'}".
-          Analise o produto.
-          JSON RÍGIDO: { "shortDescription": "frase curta vendedora", "rating": 4.5, "fullReview": { "verdict": "Veredito final", "pros": ["item1", "item2"], "cons": ["item1"], "content": "Resumo detalhado em 1 parágrafo." } }
+          Analise este produto: "${produto.titulo}".
+          Preço: R$ ${produto.price}. 
+          Categoria Selecionada: "${categoria}" (Sub: "${subcategoria || 'Geral'}").
+          
+          CONTEXTO DAS CATEGORIAS DO SITE:
+          - computadores (sub: pc-gamer, home-office, all-in-one)
+          - celulares (sub: iphone, android)
+          - notebooks (sub: gamer, trabalho, macbook)
+          - pecas (sub: placa-video, processador, placa-mae, memoria-ram)
+          - games (sub: console, controle, jogos)
+          
+          TAREFA 1: Identifique a MARCA (Ex: Apple, Samsung, Dell, Acer, Logitech, Pichau, etc). Se não tiver marca clara, use "Genérico".
+          TAREFA 2: Escreva um review curto focado na categoria "${categoria}".
+
+          JSON RÍGIDO: 
+          { 
+            "brand": "Nome da Marca",
+            "shortDescription": "frase curta vendedora", 
+            "fullReview": { 
+                "verdict": "Veredito final", 
+                "pros": ["item1", "item2"], 
+                "cons": ["item1"], 
+                "content": "Resumo detalhado." 
+            } 
+          }
         `;
         const result = await model.generateContent(prompt);
         const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").replace(/\*\*/g, "").trim();
-        dadosReview = JSON.parse(text);
+        const jsonIA = JSON.parse(text);
+
+        dadosReview = {
+            ...dadosReview,
+            ...jsonIA,
+            rating: finalRating
+        };
+
       } catch (err) { console.error("Erro IA Review:", err.message); }
 
       const precoDe = (produto.originalPrice > produto.price) ? produto.originalPrice : (produto.price * 1.25); 
@@ -149,18 +189,20 @@ export async function POST(req) {
         link: produto.link,
         category: categoria,
         subcategory: subcategoria || null,
-        brand: "Tech", // Se quiser, peça pra IA extrair a marca no JSON acima
+        
+        // AQUI ESTÁ A CORREÇÃO:
+        brand: dadosReview.brand || "Tech", // Usa a marca que a IA achou
+        
         rating: Number(dadosReview.rating),
         short_description: dadosReview.shortDescription,
         full_review: dadosReview.fullReview
       }]);
 
       if (!error) salvos++;
-      // Pequeno delay para não sobrecarregar o banco
       await new Promise(r => setTimeout(r, 200));
     }
 
-    return NextResponse.json({ success: true, message: `${salvos} processados. (Busca usada: ${termoDeBusca})` });
+    return NextResponse.json({ success: true, message: `${salvos} salvos.` });
 
   } catch (error) {
     if (browser) await browser.close();

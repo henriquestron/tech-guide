@@ -10,7 +10,6 @@ import {
 import { useFavorites } from "@/context/FavoritesContext";
 import AiSearchModal from './AiSearchModal';
 
-// ... (Mantenha as definições de CategoryItem e categories aqui igual ao anterior) ...
 type CategoryItem = {
   name: string;
   href: string;
@@ -31,11 +30,22 @@ const categories: CategoryItem[] = [
   { 
     name: 'Notebooks', 
     href: '/notebooks', 
-    icon: <Monitor size={18} />,
+    icon: <Monitor size={18} />, // Nota: Usei Monitor aqui pq Notebooks geralmente usa Laptop, mas mantive seu padrão
     subcategories: [
       { name: 'Notebooks Gamer', slug: 'gamer' },
       { name: 'Notebooks para Trabalho', slug: 'trabalho' },
       { name: 'Acessórios para Notebook', slug: 'acessorios' },
+    ]
+  },
+  // --- NOVA CATEGORIA ADICIONADA AQUI ---
+  { 
+    name: 'Computadores', 
+    href: '/computadores', 
+    icon: <Monitor size={18} />, 
+    subcategories: [
+      { name: 'PC Gamer', slug: 'pc-gamer' },
+      { name: 'Home Office / Estudo', slug: 'home-office' },
+      { name: 'All in One', slug: 'all-in-one' },
     ]
   },
   { 
@@ -47,6 +57,7 @@ const categories: CategoryItem[] = [
       { name: 'Placas de Vídeo', slug: 'placa-video' },
       { name: 'Memória RAM', slug: 'memoria-ram' },
       { name: 'Armazenamento', slug: 'ssd-hd' },
+      { name: 'Fontes', slug: 'fonte' }, // Adicionei Fontes aqui tbm pra bater com seu admin
     ]
   },
   { 
@@ -267,7 +278,6 @@ export default function Navbar() {
       </nav>
 
       {/* --- BOTÃO FLUTUANTE MOBILE (FAB) --- */}
-      {/* Só aparece em telas pequenas (md:hidden) */}
       <div className="md:hidden fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
         
         {/* Balão de Mensagem (Tooltip Mobile) */}
@@ -295,9 +305,7 @@ export default function Navbar() {
           }}
           className="group relative flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-600/30 hover:scale-110 active:scale-95 transition-all"
         >
-          {/* Animação de Pulse ("Ondinha" saindo do botão) */}
           <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75 animate-ping group-hover:hidden"></span>
-          
           <Sparkles size={24} className="relative z-10" />
         </button>
       </div>

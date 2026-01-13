@@ -5,10 +5,9 @@ import { useState, useEffect, useMemo } from "react";
 import { products as staticProducts } from "@/data/products";
 import ProductCard from "@/components/ProductCard";
 import ReviewModal from "@/components/ReviewModal";
-import FilterSidebar, { FilterState } from "@/components/FilterSidebar"; // Certifique-se que o FilterState está sendo exportado lá
+import FilterSidebar, { FilterState } from "@/components/FilterSidebar"; 
 import { Product } from "@/types";
 import { supabase } from "@/lib/supabaseClient";
-import { Menu } from "lucide-react";
 
 export default function CategoryPage() {
   const params = useParams();
@@ -31,7 +30,7 @@ export default function CategoryPage() {
   // Estado dos Filtros (Vêm da Sidebar)
   const [activeFilters, setActiveFilters] = useState<FilterState>({
     minPrice: 0,
-    maxPrice: 10000,
+    maxPrice: 30000, // Ajustado para bater com seu sidebar novo
     selectedBrands: [],
     minRating: 0
   });
@@ -69,7 +68,7 @@ export default function CategoryPage() {
           originalPrice: item.original_price ? Number(item.original_price) : 0,
           rating: Number(item.rating) || 4.5,
           shortDescription: item.short_description || "",
-          brand: item.brand || "Genérico", // Garante que sempre tenha marca
+          brand: item.brand || "Genérico",
           affiliateLink: item.link || "#", 
           link: item.link || "#",
           fullReview: item.full_review
@@ -120,7 +119,7 @@ export default function CategoryPage() {
   const availableBrands = useMemo(() => {
     const combined = [...dbProducts, ...staticProducts.filter(p => p.category === categorySlug)];
     const brands = new Set(combined.map(p => p.brand || "Outros"));
-    return Array.from(brands).sort(); // Retorna array ordenado alfabeticamente
+    return Array.from(brands).sort(); 
   }, [dbProducts, categorySlug]);
 
   // Handlers
@@ -155,8 +154,12 @@ export default function CategoryPage() {
         {/* Layout Principal: Sidebar + Grid */}
         <div className="flex flex-col lg:flex-row gap-8 items-start">
             
-            {/* Coluna Esquerda: Filtros */}
-            <div className="w-full lg:w-64 flex-shrink-0 sticky top-24">
+            {/* 🛑 CORREÇÃO AQUI 
+               - sticky top-24 -> lg:sticky lg:top-24
+               - Assim ele não gruda no mobile, evitando o overlap.
+               - z-10 garante prioridade no desktop.
+            */}
+            <div className="w-full lg:w-64 flex-shrink-0 lg:sticky lg:top-24 z-10">
                 <FilterSidebar 
                   categorySlug={categorySlug}
                   brands={availableBrands}
@@ -195,13 +198,10 @@ export default function CategoryPage() {
                           Não encontramos resultados para essa combinação de filtros em "{subcategorySlug ? formatTitle(subcategorySlug) : categorySlug}".
                       </p>
                       
-                      {/* Botão para limpar filtros se estiver vazio */}
                       {(activeFilters.selectedBrands.length > 0 || subcategorySlug) && (
                           <button 
                               onClick={() => {
-                                // Se tiver subcategoria, volta pra categoria pai
                                 if(subcategorySlug) router.push(`/${categorySlug}`);
-                                // O reset dos filtros acontece automático pois a sidebar vai desmontar/remontar ou atualizar
                               }}
                               className="mt-4 text-blue-600 hover:underline text-sm font-medium"
                           >
