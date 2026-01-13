@@ -1,20 +1,21 @@
 import { notFound } from "next/navigation";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  // 1. Verifica se é o servidor do Render (que você configurou a variável)
-  const isRobotServer = process.env.IS_ROBOT_SERVER === "true";
+// --- CORREÇÃO OBRIGATÓRIA ---
+// Isso força o Next.js a ler a variável de ambiente EM TEMPO REAL,
+// impedindo que ele gere uma página estática "404" na hora do build.
+export const dynamic = 'force-dynamic';
 
-  // 2. Verifica se é o seu computador local
-  // O Next.js define isso automaticamente como 'development' quando você roda "npm run dev"
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const isRobotServer = process.env.IS_ROBOT_SERVER === "true";
   const isLocalhost = process.env.NODE_ENV === "development";
 
-  // LÓGICA DE SEGURANÇA:
-  // Se NÃO for o servidor do robô E TAMBÉM NÃO for localhost...
-  // ...então bloqueia (assume que é a Vercel pública)
+  // --- DEBUG NO LOG DO RENDER ---
+  // Se ainda der erro, vá na aba "Logs" do Render e veja o que aparece aqui.
+  console.log(`🔒 ADMIN CHECK: Localhost=${isLocalhost} | RobotServer=${isRobotServer} (Valor real: ${process.env.IS_ROBOT_SERVER})`);
+
   if (!isRobotServer && !isLocalhost) {
     return notFound(); 
   }
 
-  // Se passou no teste, mostra a página admin
   return <>{children}</>;
 }
