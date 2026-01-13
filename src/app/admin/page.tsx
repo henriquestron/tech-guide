@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Edit3 } from 'lucide-react';
 
-// --- CONFIGURAÇÃO DE SUBCATEGORIAS (Para o Dropdown Dinâmico) ---
-// As chaves devem bater com os 'value' do select de Categoria
+// --- CONFIGURAÇÃO DE SUBCATEGORIAS ---
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
   pecas: [
     { label: 'Processadores', value: 'processador' },
@@ -25,77 +25,167 @@ const subOptionsMap: Record<string, { label: string; value: string }[]> = {
     { label: 'iPhone (iOS)', value: 'iphone' },
     { label: 'Android', value: 'android' },
   ],
-  // Adicione outras se precisar (notebooks geralmente não tem sub no seu filtro atual)
+  notebooks: [
+    { label: 'Gamer', value: 'gamer' },
+    { label: 'Trabalho', value: 'trabalho' },
+    { label: 'MacBook', value: 'macbook' },
+  ],
+  games: [
+    { label: 'Consoles', value: 'console' },
+    { label: 'Controles', value: 'controle' },
+    { label: 'Jogos', value: 'jogos' },
+  ],
+  relogios: [
+    { label: 'Smartwatch', value: 'smartwatch' },
+    { label: 'Esportivo', value: 'esportivo' },
+  ]
 };
 
+// --- COMPONENTE DE LINHA DO PRODUTO (NOVO) ---
+// Separei para gerenciar o estado dos selects de cada linha individualmente
+function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (id: any) => void, onUpdate: () => void }) {
+  const [link, setLink] = useState(product.link || '');
+  const [cat, setCat] = useState(product.category || 'notebooks');
+  const [sub, setSub] = useState(product.subcategory || '');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Quando muda a categoria, reseta a subcategoria se ela não pertencer à nova categoria
+  const handleCatChange = (newCat: string) => {
+    setCat(newCat);
+    setSub(''); // Limpa sub ao trocar categoria master
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('products')
+      .update({ 
+        link: link,
+        category: cat,
+        subcategory: sub || null // Envia null se estiver vazio
+      })
+      .eq('id', product.id);
+
+    setIsSaving(false);
+
+    if (error) {
+      alert("Erro ao salvar: " + error.message);
+    } else {
+      onUpdate(); // Atualiza a lista pai
+    }
+  };
+
+  const currentSubOptions = subOptionsMap[cat] || [];
+
+  return (
+    <tr className="hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors group border-b border-zinc-100 dark:border-zinc-800">
+      <td className="p-2 text-center align-top pt-4">
+        {product.image ? (
+            <img src={product.image} className="w-12 h-12 object-contain mx-auto border border-zinc-200 rounded bg-white"/>
+        ) : (
+            <span className="text-xl">📦</span>
+        )}
+      </td>
+      
+      {/* Coluna Dados Principais */}
+      <td className="p-3 align-top">
+        <div className="font-bold text-zinc-800 dark:text-zinc-200 text-xs mb-2 line-clamp-2" title={product.title}>
+            {product.title}
+        </div>
+        <div className="flex items-center gap-2 mb-2">
+             <span className="text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800 px-1.5 py-0.5 rounded text-[10px]">
+                R$ {product.price}
+             </span>
+        </div>
+
+        {/* --- ÁREA DE EDIÇÃO DE CATEGORIA --- */}
+        <div className="flex gap-1 flex-wrap">
+            {/* Select Categoria */}
+            <select 
+                value={cat}
+                onChange={(e) => handleCatChange(e.target.value)}
+                className="bg-zinc-100 dark:bg-zinc-800 border-none text-[10px] rounded px-1 py-1 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-blue-500 w-24"
+            >
+                {Object.keys(subOptionsMap).map(k => (
+                    <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)}</option>
+                ))}
+            </select>
+
+            {/* Select Subcategoria */}
+            <select 
+                value={sub}
+                onChange={(e) => setSub(e.target.value)}
+                className="bg-zinc-100 dark:bg-zinc-800 border-none text-[10px] rounded px-1 py-1 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-blue-500 w-24"
+                disabled={currentSubOptions.length === 0}
+            >
+                <option value="">- Geral -</option>
+                {currentSubOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+            </select>
+        </div>
+      </td>
+
+      {/* Coluna Link e Salvar */}
+      <td className="p-3 align-top">
+        <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1 bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded p-1">
+                <LinkIcon size={12} className="text-zinc-400"/>
+                <input 
+                    value={link}
+                    onChange={(e) => setLink(e.target.value)}
+                    placeholder="Cole seu link aqui..." 
+                    className="flex-1 text-xs text-zinc-800 dark:text-zinc-200 bg-transparent outline-none"
+                />
+            </div>
+            <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                className={`w-full text-white px-3 py-1.5 rounded text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1 ${
+                    isSaving ? 'bg-zinc-400' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+            >
+                {isSaving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>}
+                Salvar Alterações
+            </button>
+        </div>
+      </td>
+
+      <td className="p-3 text-center align-middle">
+        <button onClick={() => onDelete(product.id)} className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-colors">
+            <Trash size={16} />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 export default function AdminPanel() {
-  // --- ESTADOS ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   
-  // Inputs do Robô
   const [termoBusca, setTermoBusca] = useState('');
   const [categoria, setCategoria] = useState('notebooks');
-  const [subcategoria, setSubcategoria] = useState(''); // <--- NOVO ESTADO
+  const [subcategoria, setSubcategoria] = useState('');
+  const [limit, setLimit] = useState(3); 
   
-  // Controle do Sistema
   const [loading, setLoading] = useState(false);
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const [produtos, setProdutos] = useState<any[]>([]);
 
-  // ---------------------------------------------------------
-  // 1. LOGIN
-  // ---------------------------------------------------------
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('*')
-        .eq('username', user)
-        .eq('password', pass)
-        .single();
-
-      if (data && !error) {
-        setIsLoggedIn(true);
-        fetchProdutos(); 
-      } else {
-        alert("Usuário ou senha incorretos!");
-      }
-    } catch (err) {
-      alert("Erro ao conectar no banco (ou tabela admin_users não existe).");
-      // Fallback temporário para dev: se der erro, loga assim mesmo (remova em produção)
-      // setIsLoggedIn(true); 
-    }
+      const { data, error } = await supabase.from('admin_users').select('*').eq('username', user).eq('password', pass).single();
+      if (data && !error) { setIsLoggedIn(true); fetchProdutos(); } 
+      else { alert("Usuário ou senha incorretos!"); }
+    } catch (err) { alert("Erro ao conectar."); }
   };
 
-  // ---------------------------------------------------------
-  // 2. BUSCA E EDIÇÃO
-  // ---------------------------------------------------------
   async function fetchProdutos() {
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .order('id', { ascending: false }); 
-    
+    const { data } = await supabase.from('products').select('*').order('id', { ascending: false }); 
     setProdutos(data || []);
-  }
-
-  async function handleUpdateLink(id: any, novoLink: string) {
-    if (!novoLink) return alert("O link está vazio!");
-
-    const { error } = await supabase
-      .from('products')
-      .update({ link: novoLink })
-      .eq('id', id);
-    
-    if (!error) {
-      alert("✅ Link de afiliado salvo com sucesso!");
-      fetchProdutos(); 
-    } else {
-      alert("Erro ao atualizar: " + error.message);
-    }
   }
 
   async function handleDelete(id: any) {
@@ -104,55 +194,31 @@ export default function AdminPanel() {
     fetchProdutos();
   }
 
-  // ---------------------------------------------------------
-  // 3. ROBÔ PUPPETEER (ATUALIZADO)
-  // ---------------------------------------------------------
   async function rodarRobo() {
-    if (!termoBusca) return alert("Digite o que buscar (Ex: iPhone 13)!");
-    
+    if (!termoBusca) return alert("Digite o que buscar!");
     const termos = termoBusca.split(',').map(t => t.trim()).filter(t => t !== "");
     
-    setLoading(true);
-    setStatusLog([]); 
+    setLoading(true); setStatusLog([]); 
+    addLog(`🚀 Preparando busca de ${termos.length} termos... (Limite: ${limit})`);
 
     for (const termo of termos) {
-      addLog(`🚀 Iniciando busca: "${termo}" [${categoria} > ${subcategoria || 'Geral'}]...`);
-      
+      addLog(`\n🔎 Pesquisando: "${termo}"...`);
       try {
         const res = await fetch('/api/run-bot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // ATUALIZADO: Enviando a subcategoria no JSON
-          body: JSON.stringify({ 
-            termo: termo, 
-            categoria: categoria,
-            subcategoria: subcategoria 
-          })
+          body: JSON.stringify({ termo, categoria, subcategoria, limit })
         });
-
         const data = await res.json();
-
-        if (data.success) {
-           addLog(`✅ Sucesso! ${data.message}`);
-        } else {
-           addLog(`❌ Erro em ${termo}: ${data.error}`);
-        }
-
-      } catch (err: any) {
-        addLog(`❌ Erro de conexão: ${err.message}`);
-      }
-      
+        if (res.ok && data.success) addLog(`✅ Sucesso: ${data.message}`);
+        else addLog(`❌ Erro: ${data.error || 'Falha desconhecida'}`);
+      } catch (err: any) { addLog(`❌ Erro de conexão: ${err.message}`); }
       await new Promise(r => setTimeout(r, 1000));
     }
-
-    setLoading(false);
-    fetchProdutos(); 
-    alert("Processo finalizado!");
+    setLoading(false); fetchProdutos(); addLog("\n🏁 Finalizado!");
   }
 
-  function addLog(msg: string) {
-    setStatusLog(prev => [...prev, msg]);
-  }
+  function addLog(msg: string) { setStatusLog(prev => [...prev, msg]); }
 
   const baixarTxt = () => {
     const txt = produtos.map(p => `PRODUTO: ${p.title}\nLINK: ${p.link}\n-------------------\n`).join('');
@@ -160,150 +226,90 @@ export default function AdminPanel() {
     window.open(url);
   };
 
-  // --- LOGIN SCREEN ---
   if (!isLoggedIn) return (
-    <div className="flex h-screen justify-center items-center bg-zinc-900">
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded shadow w-96">
-        <h2 className="text-xl font-bold mb-4 text-black">🔐 Login Admin</h2>
-        <input placeholder="Usuário" onChange={e=>setUser(e.target.value)} className="w-full border p-2 mb-2 text-black"/>
-        <input type="password" placeholder="Senha" onChange={e=>setPass(e.target.value)} className="w-full border p-2 mb-4 text-black"/>
-        <button className="w-full bg-blue-600 text-white p-2 rounded font-bold">Entrar</button>
+    <div className="flex h-screen justify-center items-center bg-zinc-900 text-zinc-800">
+      <form onSubmit={handleLogin} className="bg-white p-8 rounded-xl shadow-2xl w-96 space-y-4">
+        <div className="text-center mb-6">
+            <div className="bg-blue-600 w-12 h-12 rounded-lg flex items-center justify-center mx-auto mb-2"><Bot className="text-white" /></div>
+            <h2 className="text-xl font-bold text-zinc-900">Login Admin</h2>
+        </div>
+        <input placeholder="Usuário" onChange={e=>setUser(e.target.value)} className="w-full border border-zinc-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"/>
+        <input type="password" placeholder="Senha" onChange={e=>setPass(e.target.value)} className="w-full border border-zinc-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"/>
+        <button className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold transition-colors">Entrar</button>
       </form>
     </div>
   );
 
-  // --- MAIN PANEL ---
   const currentSubOptions = subOptionsMap[categoria] || [];
 
   return (
-    <div className="min-h-screen bg-zinc-100 p-8 text-zinc-900">
-      <header className="flex justify-between items-center mb-8 bg-white p-4 rounded shadow">
-        <h1 className="text-3xl font-bold">🤖 Painel de Controle</h1>
-        <button onClick={()=>setIsLoggedIn(false)} className="bg-red-500 text-white px-4 py-2 rounded font-bold">Sair</button>
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-zinc-900">
+      <header className="flex justify-between items-center mb-8 bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-2 rounded-lg text-white"><Bot size={24} /></div>
+            <h1 className="text-2xl font-bold dark:text-white">Painel de Controle IA</h1>
+        </div>
+        <button onClick={()=>setIsLoggedIn(false)} className="flex items-center gap-2 text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg font-medium transition-colors"><LogOut size={18} /> Sair</button>
       </header>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* === ESQUERDA: O ROBÔ === */}
-        <div className="bg-white p-6 rounded shadow h-fit border border-gray-200">
-          <h2 className="font-bold text-lg mb-4 text-blue-800">1. Buscar Produtos (Puppeteer)</h2>
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 h-fit">
+          <h2 className="font-bold text-lg mb-6 text-zinc-800 dark:text-white flex items-center gap-2"><Search size={20} className="text-blue-600"/> Configurar Busca</h2>
+          <label className="block text-sm font-bold mb-2 text-zinc-600 dark:text-zinc-400">O que cadastrar?</label>
+          <textarea value={termoBusca} onChange={e => setTermoBusca(e.target.value)} placeholder="Ex: PC Gamer..." className="w-full border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 p-3 h-28 mb-1 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-zinc-800 dark:text-zinc-200 resize-none"/>
           
-          {/* 1. TERMO */}
-          <label className="block text-sm font-bold mb-1 text-gray-600">O que você quer cadastrar?</label>
-          <textarea 
-            value={termoBusca} onChange={e => setTermoBusca(e.target.value)}
-            placeholder="Ex: iPhone 13, Placa de Vídeo RTX 3060"
-            className="w-full border p-2 h-24 mb-4 rounded focus:outline-blue-500 text-black"
-          />
-
-          {/* 2. CATEGORIA */}
-          <label className="block text-sm font-bold mb-1 text-gray-600">Categoria Principal</label>
-          <select 
-            value={categoria} 
-            onChange={e => {
-                setCategoria(e.target.value);
-                setSubcategoria(''); // Reseta sub ao mudar categoria principal
-            }} 
-            className="w-full border p-2 mb-4 rounded text-black bg-white"
-          >
-            <option value="notebooks">Notebooks</option>
-            <option value="celulares">Celulares</option>
-            <option value="pecas">Peças de PC</option>
-            <option value="games">Games</option>
-            <option value="acessorios">Acessórios</option>
-            <option value="relogios">Relógios</option>
-          </select>
-
-          {/* 3. SUBCATEGORIA (NOVO) */}
-          <label className="block text-sm font-bold mb-1 text-gray-600">Subcategoria (Opcional)</label>
-          <select 
-            value={subcategoria} 
-            onChange={e => setSubcategoria(e.target.value)} 
-            className="w-full border p-2 mb-6 rounded text-black bg-white disabled:bg-gray-100 disabled:text-gray-400"
-            disabled={currentSubOptions.length === 0}
-          >
-            <option value="">-- Geral / Nenhuma --</option>
-            {currentSubOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                </option>
-            ))}
-          </select>
-
-          <button onClick={rodarRobo} disabled={loading} className={`w-full p-3 text-white font-bold rounded ${loading ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}>
-            {loading ? '⏳ Rodando Robô...' : '🚀 Iniciar Busca'}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-bold mb-1 text-zinc-500">Categoria</label>
+                <select value={categoria} onChange={e => { setCategoria(e.target.value); setSubcategoria(''); }} className="w-full border border-zinc-300 dark:border-zinc-700 p-2 rounded-lg bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 outline-none">
+                    {Object.keys(subOptionsMap).map(k => <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1 text-zinc-500">Subcategoria</label>
+                <select value={subcategoria} onChange={e => setSubcategoria(e.target.value)} className="w-full border border-zinc-300 dark:border-zinc-700 p-2 rounded-lg bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 outline-none disabled:opacity-50" disabled={currentSubOptions.length === 0}>
+                    <option value="">-- Geral --</option>
+                    {currentSubOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </div>
+          </div>
+          <div className="mb-6 bg-zinc-50 dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+             <label className="flex justify-between text-sm font-bold text-zinc-600 dark:text-zinc-400 mb-2"><span>Quantidade:</span><span className="text-blue-600">{limit}</span></label>
+             <input type="range" min="1" max="10" step="1" value={limit} onChange={(e) => setLimit(Number(e.target.value))} className="w-full accent-blue-600 h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer"/>
+          </div>
+          <button onClick={rodarRobo} disabled={loading || !termoBusca} className={`w-full py-3 px-4 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg ${loading ? 'bg-zinc-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90'}`}>
+            {loading ? <><Loader2 className="animate-spin" /> Processando...</> : <><Play fill="currentColor" size={18} /> Executar Robô</>}
           </button>
-
-          {/* LOG TIPO TERMINAL */}
-          <div className="mt-4 bg-black text-green-400 p-3 rounded text-xs h-48 overflow-y-auto font-mono border border-gray-700 shadow-inner">
-            {statusLog.length === 0 ? "> Aguardando comando..." : statusLog.map((l, i) => <div key={i} className="mb-1">{l}</div>)}
+          <div className="mt-6 bg-zinc-900 text-green-400 p-4 rounded-xl text-xs h-48 overflow-y-auto font-mono border border-zinc-800 shadow-inner custom-scrollbar">
+            <div className="text-zinc-600 mb-2 pb-2 border-b border-zinc-800 font-bold">TERMINAL &gt;_</div>
+            {statusLog.length === 0 ? <span className="text-zinc-600 italic">Aguardando comando...</span> : statusLog.map((l, i) => <div key={i} className="mb-1 whitespace-pre-wrap">{l}</div>)}
           </div>
         </div>
 
-        {/* === DIREITA: TABELA DE LINKS === */}
-        <div className="lg:col-span-2 bg-white p-6 rounded shadow border border-gray-200 flex flex-col h-[800px]">
-          <div className="flex justify-between mb-4 items-center">
+        <div className="lg:col-span-2 bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-[800px]">
+          <div className="flex flex-col sm:flex-row justify-between mb-6 items-center gap-4">
             <div>
-                <h2 className="font-bold text-lg text-blue-800">2. Atualizar Links ({produtos.length})</h2>
-                <p className="text-xs text-gray-500">Cole seu link de afiliado e clique em Salvar.</p>
+                <h2 className="font-bold text-lg text-zinc-800 dark:text-white flex items-center gap-2"><Save size={20} className="text-green-600"/> Gerenciar Produtos ({produtos.length})</h2>
             </div>
-            <div className="flex gap-2">
-                <button onClick={fetchProdutos} className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm font-bold">🔄 Recarregar</button>
-                <button onClick={baixarTxt} className="bg-zinc-800 text-white px-3 py-1 rounded text-sm font-bold">📂 Baixar TXT</button>
+            <div className="flex gap-2 w-full sm:w-auto">
+                <button onClick={fetchProdutos} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-2 rounded-lg text-sm font-bold transition-colors"><RefreshCw size={16} /> Recarregar</button>
+                <button onClick={baixarTxt} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors"><Download size={16} /> Baixar TXT</button>
             </div>
           </div>
           
-          <div className="flex-1 overflow-auto border rounded bg-gray-50">
+          <div className="flex-1 overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-xl bg-zinc-50 dark:bg-zinc-950 custom-scrollbar">
             <table className="w-full text-left text-sm">
-              <thead className="bg-gray-200 text-gray-700 sticky top-0 z-10">
+              <thead className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 sticky top-0 z-10">
                 <tr>
                   <th className="p-3 w-16 text-center">Img</th>
-                  <th className="p-3 w-1/3">Produto</th>
+                  <th className="p-3 w-1/3">Produto / Categoria</th>
                   <th className="p-3">Link de Afiliado</th>
                   <th className="p-3 w-16 text-center">Ação</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
                 {produtos.map(p => (
-                  <tr key={p.id} className="hover:bg-blue-50 transition-colors">
-                    <td className="p-2 text-center">
-                        {p.image ? (
-                            <img src={p.image} className="w-12 h-12 object-contain mx-auto border rounded bg-white"/>
-                        ) : (
-                            <span className="text-xl">📦</span>
-                        )}
-                    </td>
-                    <td className="p-3 align-top">
-                        <div className="font-bold text-gray-900 text-xs mb-1 line-clamp-2" title={p.title}>{p.title}</div>
-                        <div className="flex flex-wrap gap-2 items-center">
-                            <span className="text-green-700 font-bold bg-green-100 px-1 rounded text-xs">R$ {p.price}</span>
-                            <span className="text-gray-500 text-[10px] uppercase bg-gray-100 px-1 rounded">
-                                {p.category} {p.subcategory ? `> ${p.subcategory}` : ''}
-                            </span>
-                        </div>
-                    </td>
-                    <td className="p-3 align-middle">
-                        <div className="flex gap-2">
-                            <input 
-                                id={`link-${p.id}`} 
-                                defaultValue={p.link} 
-                                placeholder="🔗 Link..." 
-                                className="flex-1 border border-gray-300 rounded p-2 text-xs text-black"
-                            />
-                            <button 
-                                onClick={() => handleUpdateLink(p.id, (document.getElementById(`link-${p.id}`) as HTMLInputElement).value)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-bold"
-                            >
-                                Salvar
-                            </button>
-                        </div>
-                    </td>
-                    <td className="p-3 text-center align-middle">
-                        <button onClick={() => handleDelete(p.id)} className="text-red-500 hover:bg-red-100 p-2 rounded-full">
-                            🗑️
-                        </button>
-                    </td>
-                  </tr>
+                   <ProductRow key={p.id} product={p} onDelete={handleDelete} onUpdate={fetchProdutos} />
                 ))}
               </tbody>
             </table>

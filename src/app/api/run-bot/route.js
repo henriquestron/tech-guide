@@ -6,60 +6,66 @@ import puppeteer from "puppeteer";
 // Configurações para o Next.js não cachear
 export const dynamic = 'force-dynamic';
 
-// --- CORREÇÃO AQUI: Removido ": Request" ---
 export async function POST(req) { 
   let browser = null;
 
   try {
     // 1. Verificação de Chaves
-    if (!process.env.GEMINI_API_KEY) {
-       return NextResponse.json({ error: "Gemini API Key não configurada" }, { status: 500 });
-    }
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-       return NextResponse.json({ error: "Supabase URL não configurada" }, { status: 500 });
-    }
+    if (!process.env.GEMINI_API_KEY) return NextResponse.json({ error: "Gemini Key missing" }, { status: 500 });
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return NextResponse.json({ error: "Supabase URL missing" }, { status: 500 });
 
-    // 2. Conexões
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
+    
+    // Usando a versão flash conforme solicitado
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
     const body = await req.json();
-    const { termo, categoria, subcategoria } = body;
+    // Recebe o limite do front (padrão 3 se não vier nada)
+    const { termo, categoria, subcategoria, limit = 3 } = body; 
 
-    console.log(`\n🤖 ROBÔ RENDER - Iniciando busca: "${termo}" [${categoria} > ${subcategoria || 'Geral'}]`);
+    console.log(`\n🤖 ROBÔ - Recebido: "${termo}" | Limite: ${limit}`);
 
-    // 3. Inicia o Puppeteer (Modo Servidor Docker)
+    // --- NOVO: BUSCA INTELIGENTE COM IA ---
+    // A IA traduz "pc que roda gta" para "pc gamer i5 16gb placa video"
+    let termoDeBusca = termo;
+    try {
+        const promptSearch = `
+        Atue como um especialista em busca do Mercado Livre.
+        O usuário digitou: "${termo}".
+        Converta isso em um termo de busca OTIMIZADO e TÉCNICO para encontrar os melhores produtos.
+        Exemplo: "pc que roda tudo" -> "pc gamer completo i7 rtx"
+        Exemplo: "mouse pra jogar cs" -> "mouse gamer logitech 12000dpi"
+        Responda APENAS o termo novo, sem aspas, sem explicações.
+        `;
+        const resultSearch = await model.generateContent(promptSearch);
+        termoDeBusca = resultSearch.response.text().trim();
+        console.log(`🧠 IA traduziu "${termo}" para -> "${termoDeBusca}"`);
+    } catch (e) {
+        console.log("Falha na tradução da busca, usando termo original.");
+    }
+
+    // 2. Inicia o Puppeteer
     browser = await puppeteer.launch({
       headless: "new", 
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage", 
-        "--disable-gpu"
-      ]
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
     });
 
     const page = await browser.newPage();
-    // User Agent para não parecer robô
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-    const url = `https://lista.mercadolivre.com.br/${termo.replace(/ /g, "-")}_NoIndex_True`;
+    // Usa o termo otimizado pela IA na URL
+    const url = `https://lista.mercadolivre.com.br/${termoDeBusca.replace(/ /g, "-")}_NoIndex_True`;
     
-    // Timeout generoso (60s)
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-    
-    // Scroll para carregar imagens
     await page.evaluate(() => window.scrollBy(0, 500));
-    
-    // Função de delay simples
     await new Promise(r => setTimeout(r, 2000));
 
     // --- SCRAPING ---
-    const listaProdutos = await page.evaluate(() => {
+    const listaProdutos = await page.evaluate((limiteMax) => { // Passamos o limite pra dentro do navegador
       const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
       let elements = [];
       for (const sel of seletores) {
@@ -69,14 +75,16 @@ export async function POST(req) {
 
       const itensValidos = [];
       const linksVistos = new Set();
-      const limite = 5; 
-
+      
       for (const item of elements) {
-        if (itensValidos.length >= limite) break;
+        if (itensValidos.length >= limiteMax) break; // Usa o limite dinâmico
+        
         const linkEl = item.querySelector('a');
         if (!linkEl) continue;
+        
         let linkOriginal = linkEl.href;
         if (linkOriginal.includes('click1') || linkOriginal.includes('mclics')) continue;
+        
         let linkLimpo = linkOriginal.split('?')[0];
         if (linksVistos.has(linkLimpo)) continue;
         linksVistos.add(linkLimpo);
@@ -84,6 +92,7 @@ export async function POST(req) {
         let currentPrice = 0;
         let originalPrice = 0;
         
+        // Lógica de preço (mantida igual)
         const previousContainer = item.querySelector('.andes-money-amount--previous');
         if (previousContainer) {
             const prevVal = previousContainer.querySelector('.andes-money-amount__fraction');
@@ -104,31 +113,31 @@ export async function POST(req) {
         }
       }
       return itensValidos;
-    });
+    }, limit); // Passa o 'limit' como argumento para a função evaluate
 
-    console.log(`🎯 Encontrados: ${listaProdutos.length}`);
+    console.log(`🎯 Encontrados: ${listaProdutos.length} produtos (Limite pedido: ${limit})`);
     await browser.close();
 
-    // --- GEMINI (IA) ---
+    // --- GEMINI (Gerar Reviews) ---
     let salvos = 0;
     for (const produto of listaProdutos) {
       let dadosReview = {
          shortDescription: `Oferta: ${produto.titulo}`,
          rating: 4.5,
-         fullReview: { verdict: "Recomendado", pros: ["Preço"], cons: ["Estoque"], content: "Análise automática." }
+         fullReview: { verdict: "Recomendado", pros: ["Custo-benefício"], cons: ["Verificar frete"], content: "Análise baseada nas especificações." }
       };
 
       try {
         const prompt = `
-          Especialista SEO. Produto: "${produto.titulo}", Preço: R$ ${produto.price}.
+          Especialista Tech. Produto: "${produto.titulo}", Preço: R$ ${produto.price}.
           Categoria: "${categoria}", Subcategoria: "${subcategoria || 'Geral'}".
-          REGRAS: SEM asteriscos, SEM markdown. Texto limpo.
-          JSON: { "shortDescription": "...", "rating": 4.8, "fullReview": { "verdict": "...", "pros": ["..."], "cons": ["..."], "content": "..." } }
+          Analise o produto.
+          JSON RÍGIDO: { "shortDescription": "frase curta vendedora", "rating": 4.5, "fullReview": { "verdict": "Veredito final", "pros": ["item1", "item2"], "cons": ["item1"], "content": "Resumo detalhado em 1 parágrafo." } }
         `;
         const result = await model.generateContent(prompt);
         const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").replace(/\*\*/g, "").trim();
         dadosReview = JSON.parse(text);
-      } catch (err) { console.error("Erro IA:", err.message); }
+      } catch (err) { console.error("Erro IA Review:", err.message); }
 
       const precoDe = (produto.originalPrice > produto.price) ? produto.originalPrice : (produto.price * 1.25); 
 
@@ -140,19 +149,20 @@ export async function POST(req) {
         link: produto.link,
         category: categoria,
         subcategory: subcategoria || null,
-        brand: "Tech",
+        brand: "Tech", // Se quiser, peça pra IA extrair a marca no JSON acima
         rating: Number(dadosReview.rating),
         short_description: dadosReview.shortDescription,
         full_review: dadosReview.fullReview
       }]);
 
       if (!error) salvos++;
-      await new Promise(r => setTimeout(r, 500));
+      // Pequeno delay para não sobrecarregar o banco
+      await new Promise(r => setTimeout(r, 200));
     }
 
-    return NextResponse.json({ success: true, message: `${salvos} produtos processados no Render.` });
+    return NextResponse.json({ success: true, message: `${salvos} processados. (Busca usada: ${termoDeBusca})` });
 
-  } catch (error) { // --- CORREÇÃO AQUI: Removido ": any" ---
+  } catch (error) {
     if (browser) await browser.close();
     console.error("🚨 Erro Fatal:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
