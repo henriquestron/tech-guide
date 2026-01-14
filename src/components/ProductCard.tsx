@@ -1,6 +1,6 @@
 "use client";
 
-import { Star, Eye, ShoppingCart, Heart } from "lucide-react";
+import { Star, Eye, Heart, ShoppingBag } from "lucide-react";
 import { useFavorites } from "@/context/FavoritesContext";
 
 interface ProductCardProps {
@@ -15,22 +15,17 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
   const { isFavorite, toggleFavorite } = useFavorites();
   const productId = product.id;
 
-  // --- TRATAMENTO DE DADOS (CRUCIAL PARA APARECER TUDO) ---
-  
-  // 1. Preços: Força converter para Numero para o cálculo funcionar
+  // --- TRATAMENTO DE DADOS ---
   const price = Number(product.price) || 0;
-  // Tenta original_price (banco) ou originalPrice (legado)
   const originalPrice = Number(product.original_price || product.originalPrice) || 0;
-  
-  // 2. Descrição: Tenta todas as fontes possíveis
   const description = product.short_description || product.shortDescription || product.fullReview?.content || "Sem descrição.";
-
-  // 3. Link e Categoria
+  
+  // Link e Categoria
   const link = product.link || product.affiliateLink || "#";
   const category = product.category || "Geral";
   const rating = Number(product.rating) || 4.5;
 
-  // 4. Cálculo do Desconto (Lógica corrigida)
+  // Cálculo do Desconto
   const hasDiscount = originalPrice > price;
   const discountPercent = hasDiscount 
     ? Math.round(((originalPrice - price) / originalPrice) * 100) 
@@ -38,8 +33,18 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
 
   const favorite = isFavorite(productId);
 
+  // --- CONFIGURAÇÃO DO BOTÃO (SÓ MERCADO LIVRE) ---
+  const isAvailable = link !== "#";
+
+  // Estilo Fixo do Mercado Livre (Amarelo Ouro + Azul Escuro)
+  const btnStyle = isAvailable 
+    ? "bg-[#FFE600] hover:bg-[#F2DB00] text-[#2D3277] shadow-yellow-900/20" 
+    : "bg-zinc-800 cursor-not-allowed text-zinc-600";
+
+  const btnText = isAvailable ? "Mercado Livre" : "Indisponível";
+
   return (
-    <div className="group bg-zinc-900 rounded-xl border border-zinc-800 hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/10 flex flex-col overflow-hidden h-full relative">
+    <div className="group bg-zinc-900 rounded-xl border border-zinc-800 hover:border-[#FFE600]/50 transition-all duration-300 hover:shadow-xl hover:shadow-yellow-900/10 flex flex-col overflow-hidden h-full relative">
       
       {/* Botão Favoritar */}
       <button 
@@ -58,7 +63,7 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
       {/* ÁREA DA IMAGEM */}
       <div className="relative aspect-[4/3] p-4 bg-white flex items-center justify-center overflow-hidden">
         
-        {/* Etiqueta de Desconto (Só aparece se tiver desconto real) */}
+        {/* Etiqueta de Desconto */}
         {hasDiscount && discountPercent > 0 && (
           <div className="absolute top-3 left-3 z-20 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md animate-in fade-in zoom-in">
             {discountPercent}% OFF
@@ -92,16 +97,16 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
         </span>
         
         {/* Título */}
-        <h3 className="font-bold text-sm leading-tight mb-2 text-zinc-100 group-hover:text-blue-400 transition-colors line-clamp-2 min-h-[2.5rem]" title={product.title}>
+        <h3 className="font-bold text-sm leading-tight mb-2 text-zinc-100 group-hover:text-[#FFE600] transition-colors line-clamp-2 min-h-[2.5rem]" title={product.title}>
           {product.title}
         </h3>
         
-        {/* DESCRIÇÃO (Corrigida) */}
+        {/* DESCRIÇÃO */}
         <p className="text-xs text-zinc-400 line-clamp-2 mb-4 min-h-[2rem] leading-relaxed">
           {description}
         </p>
 
-        {/* ÁREA DE PREÇO (Corrigida) */}
+        {/* ÁREA DE PREÇO */}
         <div className="mt-auto mb-4 border-t border-zinc-800/50 pt-3">
           {hasDiscount && (
             <span className="text-xs text-zinc-500 line-through block mb-0.5">
@@ -130,18 +135,15 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
             <Eye size={14} /> Análise
           </button>
           
+          {/* BOTÃO ÚNICO MERCADO LIVRE */}
           <a 
             href={link}
-            target={link !== "#" ? "_blank" : "_self"} 
+            target={isAvailable ? "_blank" : "_self"} 
             rel="noopener noreferrer nofollow"
-            className={`flex items-center justify-center gap-2 px-3 py-2 font-bold rounded-lg transition-colors shadow-sm hover:shadow-md text-xs
-              ${link === "#" 
-                ? "bg-zinc-800 cursor-not-allowed text-zinc-600" 
-                : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20"
-              }`}
+            className={`flex items-center justify-center gap-2 px-3 py-2 font-bold rounded-lg transition-colors shadow-sm hover:shadow-md text-xs ${btnStyle}`}
           >
-            <ShoppingCart size={14} />
-            Comprar
+            <ShoppingBag size={14} />
+            {btnText}
           </a>
         </div>
       </div>

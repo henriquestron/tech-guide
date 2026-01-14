@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Edit3, Sparkles } from 'lucide-react';
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE SUBCATEGORIAS ---
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
@@ -47,41 +47,21 @@ const subOptionsMap: Record<string, { label: string; value: string }[]> = {
 };
 
 // --- COMPONENTE DE LINHA DO PRODUTO ---
-function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (id: any) => void, onUpdate: () => void }) {
+function ProductRow({ product, onDelete, onApprove }: { product: any, onDelete: (id: any) => void, onApprove: (id: any, newLink: string) => void }) {
   const [link, setLink] = useState(product.link || '');
   const [cat, setCat] = useState(product.category || 'notebooks');
   const [sub, setSub] = useState(product.subcategory || '');
-  const [isSaving, setIsSaving] = useState(false);
+  const [isModified, setIsModified] = useState(false);
+  
+  // Verifica se é pendente
+  const isPending = product.status === 'pending';
 
-  const handleCatChange = (newCat: string) => {
-    setCat(newCat);
-    setSub(''); 
+  const handleSaveOrApprove = () => {
+    onApprove(product.id, link); // A função pai decide se aprova ou só salva
   };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    const { error } = await supabase
-      .from('products')
-      .update({ 
-        link: link,
-        category: cat,
-        subcategory: sub || null 
-      })
-      .eq('id', product.id);
-
-    setIsSaving(false);
-
-    if (error) {
-      alert("Erro ao salvar: " + error.message);
-    } else {
-      onUpdate(); 
-    }
-  };
-
-  const currentSubOptions = subOptionsMap[cat] || [];
 
   return (
-    <tr className="hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors group border-b border-zinc-100 dark:border-zinc-800">
+    <tr className={`border-b border-zinc-100 dark:border-zinc-800 transition-colors group ${isPending ? 'bg-yellow-50 dark:bg-yellow-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900/50'}`}>
       <td className="p-2 text-center align-top pt-4">
         {product.image ? (
             <img src={product.image} className="w-12 h-12 object-contain mx-auto border border-zinc-200 rounded bg-white"/>
@@ -96,7 +76,6 @@ function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (
             {product.title}
         </div>
         
-        {/* Mostra a Marca Detectada */}
         <div className="flex items-center gap-2 mb-2">
              <span className="text-[10px] uppercase font-bold text-zinc-400 border border-zinc-200 dark:border-zinc-700 px-1 rounded">
                 {product.brand || "Tech"}
@@ -104,56 +83,46 @@ function ProductRow({ product, onDelete, onUpdate }: { product: any, onDelete: (
              <span className="text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800 px-1.5 py-0.5 rounded text-[10px]">
                 R$ {product.price}
              </span>
-        </div>
-
-        {/* --- ÁREA DE EDIÇÃO DE CATEGORIA --- */}
-        <div className="flex gap-1 flex-wrap">
-            <select 
-                value={cat}
-                onChange={(e) => handleCatChange(e.target.value)}
-                className="bg-zinc-100 dark:bg-zinc-800 border-none text-[10px] rounded px-1 py-1 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-blue-500 w-24"
-            >
-                {Object.keys(subOptionsMap).map(k => (
-                    <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)}</option>
-                ))}
-            </select>
-
-            <select 
-                value={sub}
-                onChange={(e) => setSub(e.target.value)}
-                className="bg-zinc-100 dark:bg-zinc-800 border-none text-[10px] rounded px-1 py-1 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-blue-500 w-24"
-                disabled={currentSubOptions.length === 0}
-            >
-                <option value="">- Geral -</option>
-                {currentSubOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-            </select>
+             <span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1 rounded">
+                {product.category}
+             </span>
         </div>
       </td>
 
       {/* Coluna Link e Salvar */}
       <td className="p-3 align-top">
         <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-1 bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded p-1">
+            <div className={`flex items-center gap-1 border rounded p-1 transition-colors ${isPending && !link.includes('/sec/') ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20' : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950'}`}>
                 <LinkIcon size={12} className="text-zinc-400"/>
                 <input 
                     value={link}
-                    onChange={(e) => setLink(e.target.value)}
+                    onChange={(e) => { setLink(e.target.value); setIsModified(true); }}
                     placeholder="Cole seu link aqui..." 
                     className="flex-1 text-xs text-zinc-800 dark:text-zinc-200 bg-transparent outline-none"
                 />
             </div>
-            <button 
-                onClick={handleSave}
-                disabled={isSaving}
-                className={`w-full text-white px-3 py-1.5 rounded text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1 ${
-                    isSaving ? 'bg-zinc-400' : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-            >
-                {isSaving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>}
-                Salvar Alterações
-            </button>
+            
+            <div className="flex gap-2">
+                <a href={product.link} target="_blank" className="p-1.5 text-zinc-400 hover:text-blue-500 bg-zinc-100 dark:bg-zinc-800 rounded"><ExternalLink size={14}/></a>
+                
+                {/* BOTÃO MUDA DEPENDENDO SE É PENDENTE OU APROVADO */}
+                {isPending ? (
+                    <button 
+                        onClick={handleSaveOrApprove}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-sm transition-all"
+                    >
+                        <CheckCircle size={12}/> Aprovar & Publicar
+                    </button>
+                ) : (
+                    <button 
+                        onClick={handleSaveOrApprove}
+                        disabled={!isModified}
+                        className={`flex-1 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 transition-all ${isModified ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600'}`}
+                    >
+                        <Save size={12}/> Salvar
+                    </button>
+                )}
+            </div>
         </div>
       </td>
 
@@ -171,6 +140,9 @@ export default function AdminPanel() {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   
+  // Controle de Abas
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved'>('pending');
+
   const [termoBusca, setTermoBusca] = useState('');
   const [categoria, setCategoria] = useState('notebooks');
   const [subcategoria, setSubcategoria] = useState('');
@@ -180,33 +152,61 @@ export default function AdminPanel() {
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const [produtos, setProdutos] = useState<any[]>([]);
 
+  // Recarrega produtos quando muda a aba
+  useEffect(() => { 
+      if(isLoggedIn) fetchProdutos(); 
+  }, [activeTab, isLoggedIn]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const { data, error } = await supabase.from('admin_users').select('*').eq('username', user).eq('password', pass).single();
-      if (data && !error) { setIsLoggedIn(true); fetchProdutos(); } 
+      if (data && !error) { setIsLoggedIn(true); } 
       else { alert("Usuário ou senha incorretos!"); }
     } catch (err) { alert("Erro ao conectar."); }
   };
 
   async function fetchProdutos() {
-    const { data } = await supabase.from('products').select('*').order('id', { ascending: false }); 
+    const { data } = await supabase
+        .from('products')
+        .select('*')
+        .eq('status', activeTab) // Filtra pela aba (Pendentes ou Aprovados)
+        .order('id', { ascending: false }); 
     setProdutos(data || []);
+  }
+
+  // Função para Aprovar (Muda status para approved) ou apenas Salvar Edição
+  async function handleApproveOrSave(id: any, newLink: string) {
+    const { error } = await supabase
+        .from('products')
+        .update({ link: newLink, status: 'approved' })
+        .eq('id', id);
+
+    if (!error) {
+        // Remove da lista atual se estivermos na aba de pendentes
+        if (activeTab === 'pending') {
+            setProdutos(produtos.filter(p => p.id !== id));
+        } else {
+            alert("Alteração salva!");
+        }
+    } else {
+        alert("Erro ao salvar.");
+    }
   }
 
   async function handleDelete(id: any) {
     if (!confirm("Tem certeza que deseja apagar este produto?")) return;
     await supabase.from('products').delete().eq('id', id);
-    fetchProdutos();
+    // Atualiza a lista local removendo o item
+    setProdutos(produtos.filter(p => p.id !== id));
   }
 
-  // --- FUNÇÃO DO ROBÔ DE BUSCA ---
   async function rodarRobo() {
     if (!termoBusca) return alert("Digite o que buscar!");
     const termos = termoBusca.split(',').map(t => t.trim()).filter(t => t !== "");
     
     setLoading(true); setStatusLog([]); 
-    addLog(`🚀 Preparando busca de ${termos.length} termos... (Limite: ${limit})`);
+    addLog(`🚀 Iniciando busca para ${termos.length} termos...`);
 
     for (const termo of termos) {
       addLog(`\n🔎 Pesquisando: "${termo}"...`);
@@ -222,49 +222,36 @@ export default function AdminPanel() {
       } catch (err: any) { addLog(`❌ Erro de conexão: ${err.message}`); }
       await new Promise(r => setTimeout(r, 1000));
     }
-    setLoading(false); fetchProdutos(); addLog("\n🏁 Finalizado!");
+    setLoading(false); 
+    if(activeTab === 'pending') fetchProdutos(); // Atualiza a lista se estiver vendo pendentes
+    addLog("\n🏁 Finalizado!");
   }
 
-  // --- NOVA FUNÇÃO: CORRIGIR CATEGORIAS COM IA ---
   async function corrigirCategoriasIA() {
-    if (!confirm("Isso vai usar a IA para reclassificar Categoria, Subcategoria e Marca de TODOS os produtos listados abaixo. Deseja continuar?")) return;
-    
-    setLoading(true);
-    setStatusLog([]); // Limpa o log visual
-    addLog(`🔧 Iniciando correção inteligente de ${produtos.length} produtos...`);
+    if (!confirm("Isso vai usar a IA para corrigir categorias e marcas. Continuar?")) return;
+    setLoading(true); setStatusLog([]); 
+    addLog(`🔧 Corrigindo ${produtos.length} produtos...`);
 
     let atualizados = 0;
-
     for (const p of produtos) {
         addLog(`⏳ Analisando: ${p.title.substring(0, 30)}...`);
-        
         try {
             const res = await fetch('/api/fix-product', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: p.id, title: p.title })
             });
-            
             const data = await res.json();
-            
             if (data.success) {
-                addLog(`✅ ${data.updated.brand} | ${data.updated.category} > ${data.updated.subcategory}`);
+                addLog(`✅ ${data.updated.brand} | ${data.updated.category}`);
                 atualizados++;
-            } else {
-                addLog(`❌ Erro: ${data.error}`);
             }
-
-        } catch (err) {
-            addLog(`❌ Falha na conexão.`);
-        }
-        
-        // Pequeno delay pra não travar a API do Google (Rate Limit)
+        } catch (err) {}
         await new Promise(r => setTimeout(r, 500));
     }
-
-    addLog(`🏁 Fim! ${atualizados} produtos corrigidos.`);
+    addLog(`🏁 Fim! ${atualizados} corrigidos.`);
     setLoading(false);
-    fetchProdutos(); // Recarrega a tabela oficial do banco
+    fetchProdutos();
   }
 
   function addLog(msg: string) { setStatusLog(prev => [...prev, msg]); }
@@ -341,24 +328,32 @@ export default function AdminPanel() {
         <div className="lg:col-span-2 bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-[800px]">
           <div className="flex flex-col sm:flex-row justify-between mb-6 items-center gap-4">
             <div>
-                <h2 className="font-bold text-lg text-zinc-800 dark:text-white flex items-center gap-2"><Save size={20} className="text-green-600"/> Gerenciar Produtos ({produtos.length})</h2>
+                <h2 className="font-bold text-lg text-zinc-800 dark:text-white flex items-center gap-2"><Save size={20} className="text-green-600"/> Gerenciar Produtos</h2>
             </div>
             
-            {/* BOTÕES DE AÇÃO */}
             <div className="flex gap-2 w-full sm:w-auto">
-                {/* Botão Mágico de Correção */}
-                <button 
-                    onClick={corrigirCategoriasIA} 
-                    disabled={loading || produtos.length === 0}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-md"
-                    title="Usar IA para corrigir Categoria e Marca automaticamente"
-                >
+                <button onClick={corrigirCategoriasIA} disabled={loading || produtos.length === 0} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-md">
                     <Sparkles size={16} /> Corrigir Tudo
                 </button>
-
                 <button onClick={fetchProdutos} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-2 rounded-lg text-sm font-bold transition-colors"><RefreshCw size={16} /> Recarregar</button>
                 <button onClick={baixarTxt} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors"><Download size={16} /> Baixar TXT</button>
             </div>
+          </div>
+
+          {/* ABAS DE NAVEGAÇÃO */}
+          <div className="flex gap-6 border-b border-zinc-200 dark:border-zinc-800 mb-4">
+             <button 
+                onClick={() => setActiveTab('pending')} 
+                className={`pb-3 px-2 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'pending' ? 'border-blue-600 text-blue-600' : 'border-transparent text-zinc-400 hover:text-zinc-600'}`}
+             >
+                <Clock size={16}/> Pendentes ({produtos.length})
+             </button>
+             <button 
+                onClick={() => setActiveTab('approved')} 
+                className={`pb-3 px-2 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'approved' ? 'border-green-600 text-green-600' : 'border-transparent text-zinc-400 hover:text-zinc-600'}`}
+             >
+                <CheckCircle size={16}/> Publicados no Site
+             </button>
           </div>
           
           <div className="flex-1 overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-xl bg-zinc-50 dark:bg-zinc-950 custom-scrollbar">
@@ -372,9 +367,13 @@ export default function AdminPanel() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
-                {produtos.map(p => (
-                   <ProductRow key={p.id} product={p} onDelete={handleDelete} onUpdate={fetchProdutos} />
-                ))}
+                {produtos.length === 0 ? (
+                    <tr><td colSpan={4} className="p-8 text-center text-zinc-400">Nenhum produto nesta lista.</td></tr>
+                ) : (
+                    produtos.map(p => (
+                        <ProductRow key={p.id} product={p} onDelete={handleDelete} onApprove={handleApproveOrSave} />
+                    ))
+                )}
               </tbody>
             </table>
           </div>
