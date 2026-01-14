@@ -1,0 +1,31 @@
+name: Robô Vendas (Puppeteer Heavy)
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Roda a cada hora (minuto 0)
+  workflow_dispatch: # Permite rodar manualmente clicando no botão
+
+jobs:
+  scraping-job:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # Dá 15 minutos pro robô rodar (Sobra tempo!)
+    
+    steps:
+      - name: 📥 Baixar Código
+        uses: actions/checkout@v4
+
+      - name: 🟢 Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Instalar Dependências
+        run: npm install puppeteer @supabase/supabase-js @google/generative-ai dotenv
+
+      - name: 🤖 Rodar Robô
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: node scripts/robo.js
