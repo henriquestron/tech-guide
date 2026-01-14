@@ -1,0 +1,35 @@
+name: Gerente do Site (Ping & Vendas)
+
+on:
+  schedule:
+    # 1. Roda a cada 15 minutos para manter acordado
+    - cron: '*/15 * * * *'
+  # Permite rodar manualmente no botão "Run workflow"
+  workflow_dispatch:
+
+jobs:
+  manutencao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # O GitHub espera até 10 minutos (CronJob só espera 30s)
+
+    steps:
+      - name: 🔔 1. Acordar Servidor (Ping)
+        # O flag --max-time 300 diz pro curl esperar até 300 segundos (5 min)
+        # Isso garante que o Render tenha tempo de sobra para ligar
+        run: |
+          echo "Acordando o servidor..."
+          curl -X GET https://tech-guide.onrender.com/api/ping \
+          --max-time 300 \
+          --retry 3 \
+          --retry-delay 5
+
+      - name: 🤖 2. Executar Robô de Vendas (Apenas na virada da hora)
+        # Esse passo verifica se o minuto atual é "00" ou próximo disso
+        # Se for, ele roda o robô pesado (Puppeteer)
+        if: endsWith(github.event.schedule, '0 * * * *') || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Hora de trabalhar! Iniciando Puppeteer..."
+          curl -X POST https://tech-guide.onrender.com/api/run-bot \
+          -H "Content-Type: application/json" \
+          -d '{}' \
+          --max-time 300
