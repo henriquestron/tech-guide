@@ -2,13 +2,23 @@ name: Robô Vendas (Puppeteer Heavy)
 
 on:
   schedule:
-    - cron: '0 * * * *' # Roda a cada hora (minuto 0)
-  workflow_dispatch: # Permite rodar manualmente clicando no botão
+    - cron: '0 * * * *' # Roda a cada hora
+  workflow_dispatch: 
+    inputs:
+      termo:
+        description: 'Termo de busca manual'
+        required: false
+      categoria:
+        description: 'Categoria'
+        required: false
+      subcategoria:
+        description: 'Subcategoria'
+        required: false
 
 jobs:
   scraping-job:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # Dá 15 minutos pro robô rodar (Sobra tempo!)
+    timeout-minutes: 15
     
     steps:
       - name: 📥 Baixar Código
@@ -28,4 +38,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # Aqui passamos os inputs manuais para o script ler
+          INPUT_TERMO: ${{ inputs.termo }}
+          INPUT_CATEGORIA: ${{ inputs.categoria }}
+          INPUT_SUBCATEGORIA: ${{ inputs.subcategoria }}
         run: node scripts/robo.js

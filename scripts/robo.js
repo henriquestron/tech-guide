@@ -1,13 +1,13 @@
-// ARQUIVO: scripts/robo.js
+// scripts/robo.js
 
-// Carrega variáveis de ambiente se estiver rodando local (para testes)
+// Carrega variáveis de ambiente se estiver rodando local
 require('dotenv').config();
 
 const { createClient } = require('@supabase/supabase-js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const puppeteer = require('puppeteer');
 
-// Função principal que o GitHub vai chamar
+// Função principal
 async function run() {
   console.log("🚀 Iniciando Robô TechGuide no GitHub Runner...");
 
@@ -23,37 +23,51 @@ async function run() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-  // 2. LISTA AUTOMÁTICA
-  const listaAutomatica = [
-    { termo: "iphone 13 128gb", categoria: "celulares", subcategoria: "iphone" },
-    { termo: "iphone 15 pro max", categoria: "celulares", subcategoria: "iphone" },
-    { termo: "samsung galaxy s24 ultra", categoria: "celulares", subcategoria: "android" },
-    { termo: "xiaomi poco x6 pro", categoria: "celulares", subcategoria: "android" },
-    { termo: "motorola edge 50", categoria: "celulares", subcategoria: "android" },
-    
-    { termo: "notebook gamer rtx 4050", categoria: "notebooks", subcategoria: "gamer" },
-    { termo: "macbook air m1", categoria: "notebooks", subcategoria: "macbook" },
-    { termo: "notebook dell i5 ssd", categoria: "notebooks", subcategoria: "trabalho" },
-    
-    { termo: "pc gamer i5 rtx", categoria: "computadores", subcategoria: "pc-gamer" },
-    { termo: "computador all in one", categoria: "computadores", subcategoria: "all-in-one" },
-    
-    { termo: "placa de video rtx 4060", categoria: "pecas", subcategoria: "placa-video" },
-    { termo: "processador ryzen 5 5600", categoria: "pecas", subcategoria: "processador" },
-    { termo: "ssd nvme 1tb", categoria: "pecas", subcategoria: "ssd-hd" },
-    
-    { termo: "ps5 slim digital", categoria: "games", subcategoria: "console" },
-    { termo: "nintendo switch oled", categoria: "games", subcategoria: "console" },
-    
-    { termo: "monitor gamer 144hz ips", categoria: "acessorios", subcategoria: "monitor" },
-    { termo: "headset gamer sem fio", categoria: "acessorios", subcategoria: "headset" }
-  ];
+  // 2. LÓGICA HÍBRIDA: MANUAL vs AUTOMÁTICO
+  let termo, categoria, subcategoria;
 
-  // Sorteio
-  const sorteado = listaAutomatica[Math.floor(Math.random() * listaAutomatica.length)];
-  const { termo, categoria, subcategoria } = sorteado;
-  
-  console.log(`⏰ Sorteado: "${termo}" | Categoria: ${categoria}`);
+  // Verifica se o GitHub Actions recebeu inputs manuais (Do seu Painel Admin)
+  if (process.env.INPUT_TERMO && process.env.INPUT_TERMO.trim() !== "") {
+      console.log("👋 MODO MANUAL DETECTADO (Vindo do Admin)");
+      termo = process.env.INPUT_TERMO;
+      categoria = process.env.INPUT_CATEGORIA || "geral";
+      subcategoria = process.env.INPUT_SUBCATEGORIA || null;
+  } else {
+      console.log("⏰ MODO AUTOMÁTICO (CronJob)");
+      
+      const listaAutomatica = [
+        { termo: "iphone 13 128gb", categoria: "celulares", subcategoria: "iphone" },
+        { termo: "iphone 15 pro max", categoria: "celulares", subcategoria: "iphone" },
+        { termo: "samsung galaxy s24 ultra", categoria: "celulares", subcategoria: "android" },
+        { termo: "xiaomi poco x6 pro", categoria: "celulares", subcategoria: "android" },
+        { termo: "motorola edge 50", categoria: "celulares", subcategoria: "android" },
+        
+        { termo: "notebook gamer rtx 4050", categoria: "notebooks", subcategoria: "gamer" },
+        { termo: "macbook air m1", categoria: "notebooks", subcategoria: "macbook" },
+        { termo: "notebook dell i5 ssd", categoria: "notebooks", subcategoria: "trabalho" },
+        
+        { termo: "pc gamer i5 rtx", categoria: "computadores", subcategoria: "pc-gamer" },
+        { termo: "computador all in one", categoria: "computadores", subcategoria: "all-in-one" },
+        
+        { termo: "placa de video rtx 4060", categoria: "pecas", subcategoria: "placa-video" },
+        { termo: "processador ryzen 5 5600", categoria: "pecas", subcategoria: "processador" },
+        { termo: "ssd nvme 1tb", categoria: "pecas", subcategoria: "ssd-hd" },
+        
+        { termo: "ps5 slim digital", categoria: "games", subcategoria: "console" },
+        { termo: "nintendo switch oled", categoria: "games", subcategoria: "console" },
+        
+        { termo: "monitor gamer 144hz ips", categoria: "acessorios", subcategoria: "monitor" },
+        { termo: "headset gamer sem fio", categoria: "acessorios", subcategoria: "headset" }
+      ];
+
+      // Sorteio
+      const sorteado = listaAutomatica[Math.floor(Math.random() * listaAutomatica.length)];
+      termo = sorteado.termo;
+      categoria = sorteado.categoria;
+      subcategoria = sorteado.subcategoria;
+  }
+
+  console.log(`🎯 Alvo Definido: "${termo}" | Categoria: ${categoria}`);
 
   // 3. IA: OTIMIZAÇÃO DE BUSCA
   let termoDeBusca = termo;
@@ -72,21 +86,19 @@ async function run() {
       console.log("Falha na tradução da busca, usando termo original.");
   }
 
-  // 4. Puppeteer (Rodando no Linux do GitHub)
+  // 4. Puppeteer (Heavy Mode - GitHub Aguenta!)
   const browser = await puppeteer.launch({
     headless: "new", 
-    // Essas flags ajudam a rodar no ambiente CI/CD do GitHub
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
   });
 
   const page = await browser.newPage();
-  // User Agent real para evitar bloqueios
   await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
   const url = `https://lista.mercadolivre.com.br/${termoDeBusca.replace(/ /g, "-")}_NoIndex_True`;
   console.log(`🌍 Navegando para: ${url}`);
   
-  // Timeout generoso de 60s (O GitHub aguenta)
+  // Timeout generoso de 60s
   try {
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
   } catch (err) {
@@ -96,12 +108,11 @@ async function run() {
   // Scroll para carregar lazy loading
   try {
     await page.evaluate(() => window.scrollBy(0, 800));
-    // Pausa de 2 segundos (substituindo o setTimeout com Promise)
     await new Promise(r => setTimeout(r, 2000));
   } catch (e) {}
 
   // 5. Scraping
-  const limit = 5; // Vamos pegar 5 produtos por vez
+  const limit = 5; 
   const listaProdutos = await page.evaluate((limiteMax) => { 
     const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
     let elements = [];
