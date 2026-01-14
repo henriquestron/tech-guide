@@ -30,7 +30,7 @@ export default function CategoryPage() {
   // Estado dos Filtros (Vêm da Sidebar)
   const [activeFilters, setActiveFilters] = useState<FilterState>({
     minPrice: 0,
-    maxPrice: 30000, // Ajustado para bater com seu sidebar novo
+    maxPrice: 30000, 
     selectedBrands: [],
     minRating: 0
   });
@@ -45,7 +45,8 @@ export default function CategoryPage() {
       let query = supabase
         .from('products')
         .select('*')
-        .ilike('category', categorySlug);
+        .ilike('category', categorySlug)
+        .eq('status', 'approved'); // <--- FILTRO DE SEGURANÇA AQUI TAMBÉM
 
       // Filtro de Subcategoria (se existir na URL)
       if (subcategorySlug) {
@@ -100,13 +101,9 @@ export default function CategoryPage() {
       const rating = product.rating;
       const brand = product.brand || "Outros";
 
-      // Filtro de Preço
       if (price < activeFilters.minPrice || price > activeFilters.maxPrice) return false;
-
-      // Filtro de Avaliação
       if (rating < activeFilters.minRating) return false;
 
-      // Filtro de Marca (Só aplica se tiver alguma selecionada)
       if (activeFilters.selectedBrands.length > 0) {
         if (!activeFilters.selectedBrands.includes(brand)) return false;
       }
@@ -115,7 +112,7 @@ export default function CategoryPage() {
     });
   }, [dbProducts, subcategorySlug, categorySlug, activeFilters]);
 
-  // 5. Extrai marcas disponíveis para passar para a Sidebar
+  // 5. Extrai marcas disponíveis
   const availableBrands = useMemo(() => {
     const combined = [...dbProducts, ...staticProducts.filter(p => p.category === categorySlug)];
     const brands = new Set(combined.map(p => p.brand || "Outros"));
@@ -154,11 +151,6 @@ export default function CategoryPage() {
         {/* Layout Principal: Sidebar + Grid */}
         <div className="flex flex-col lg:flex-row gap-8 items-start">
             
-            {/* 🛑 CORREÇÃO AQUI 
-               - sticky top-24 -> lg:sticky lg:top-24
-               - Assim ele não gruda no mobile, evitando o overlap.
-               - z-10 garante prioridade no desktop.
-            */}
             <div className="w-full lg:w-64 flex-shrink-0 lg:sticky lg:top-24 z-10">
                 <FilterSidebar 
                   categorySlug={categorySlug}

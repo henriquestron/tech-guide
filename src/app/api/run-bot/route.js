@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import puppeteer from "puppeteer";
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // 60 segundos limite para Serverless
+export const maxDuration = 60; 
 
 export async function POST(req) { 
   let browser = null;
@@ -22,101 +22,73 @@ export async function POST(req) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-    // --- LÓGICA DE AUTO-PILOTO ---
+    // 2. Leitura do Body
     let body = {};
     try { body = await req.json(); } catch (e) {}
 
-    // 📜 SUPER LISTA DE PRODUTOS (Cobre todas as categorias da sua imagem)
+    // 📜 LISTA AUTOMÁTICA (Para rodar no CronJob)
     const listaAutomatica = [
-      // CELULARES
-      { termo: "iphone desbloqueado", categoria: "celulares", subcategoria: "iphone" },
-{ termo: "iphone pro max", categoria: "celulares", subcategoria: "iphone" },
-{ termo: "iphone usado bom estado", categoria: "celulares", subcategoria: "iphone" },
-
-{ termo: "samsung galaxy s", categoria: "celulares", subcategoria: "android" },
-{ termo: "samsung galaxy a", categoria: "celulares", subcategoria: "android" },
-{ termo: "xiaomi poco", categoria: "celulares", subcategoria: "android" },
-{ termo: "motorola edge", categoria: "celulares", subcategoria: "android" },
-{ termo: "smartphone android 5g", categoria: "celulares", subcategoria: "android" },
-
-
-      // NOTEBOOKS
-      { termo: "notebook gamer", categoria: "notebooks", subcategoria: "gamer" },
-{ termo: "notebook gamer rtx", categoria: "notebooks", subcategoria: "gamer" },
-
-{ termo: "macbook air", categoria: "notebooks", subcategoria: "macbook" },
-{ termo: "macbook pro", categoria: "notebooks", subcategoria: "macbook" },
-
-{ termo: "notebook para trabalho", categoria: "notebooks", subcategoria: "trabalho" },
-{ termo: "notebook i5 ssd", categoria: "notebooks", subcategoria: "trabalho" },
-
-
-      // COMPUTADORES
-      { termo: "pc gamer", categoria: "computadores", subcategoria: "pc-gamer" },
-{ termo: "pc gamer rtx", categoria: "computadores", subcategoria: "pc-gamer" },
-{ termo: "pc gamer ryzen", categoria: "computadores", subcategoria: "pc-gamer" },
-
-{ termo: "computador all in one", categoria: "computadores", subcategoria: "all-in-one" },
-
-      // PEÇAS PC
-      { termo: "placa de video rtx", categoria: "pecas", subcategoria: "placa-video" },
-{ termo: "placa de video amd rx", categoria: "pecas", subcategoria: "placa-video" },
-
-{ termo: "processador ryzen", categoria: "pecas", subcategoria: "processador" },
-{ termo: "processador intel core i5", categoria: "pecas", subcategoria: "processador" },
-
-{ termo: "ssd nvme", categoria: "pecas", subcategoria: "ssd-hd" },
-{ termo: "memoria ram ddr4", categoria: "pecas", subcategoria: "memoria-ram" },
-{ termo: "fonte 80 plus", categoria: "pecas", subcategoria: "fonte" }
-,
-
-      // GAMES
-      { termo: "console playstation 5", categoria: "games", subcategoria: "console" },
-{ termo: "console xbox series", categoria: "games", subcategoria: "console" },
-{ termo: "nintendo switch", categoria: "games", subcategoria: "console" },
-
-{ termo: "controle ps5", categoria: "games", subcategoria: "controle" },
-{ termo: "controle xbox", categoria: "games", subcategoria: "controle" }
-,
-
-      // ACESSÓRIOS
-      { termo: "headset gamer", categoria: "acessorios", subcategoria: "headset" },
-{ termo: "mouse gamer", categoria: "acessorios", subcategoria: "mouse" },
-{ termo: "teclado mecanico", categoria: "acessorios", subcategoria: "teclado" },
-
-{ termo: "monitor gamer", categoria: "acessorios", subcategoria: "monitor" },
-{ termo: "monitor 144hz", categoria: "acessorios", subcategoria: "monitor" }
-,
-
-      // RELÓGIOS
-      { termo: "apple watch", categoria: "relogios", subcategoria: "smartwatch" },
-{ termo: "samsung galaxy watch", categoria: "relogios", subcategoria: "smartwatch" },
-{ termo: "relogio esportivo garmin", categoria: "relogios", subcategoria: "esportivo" }
-
+      { termo: "iphone 13 128gb", categoria: "celulares", subcategoria: "iphone" },
+      { termo: "iphone 15 pro max", categoria: "celulares", subcategoria: "iphone" },
+      { termo: "samsung galaxy s24 ultra", categoria: "celulares", subcategoria: "android" },
+      { termo: "xiaomi poco x6 pro", categoria: "celulares", subcategoria: "android" },
+      { termo: "motorola edge 50", categoria: "celulares", subcategoria: "android" },
+      
+      { termo: "notebook gamer rtx 4050", categoria: "notebooks", subcategoria: "gamer" },
+      { termo: "macbook air m1", categoria: "notebooks", subcategoria: "macbook" },
+      { termo: "notebook dell i5 ssd", categoria: "notebooks", subcategoria: "trabalho" },
+      
+      { termo: "pc gamer i5 rtx", categoria: "computadores", subcategoria: "pc-gamer" },
+      { termo: "computador all in one", categoria: "computadores", subcategoria: "all-in-one" },
+      
+      { termo: "placa de video rtx 4060", categoria: "pecas", subcategoria: "placa-video" },
+      { termo: "processador ryzen 5 5600", categoria: "pecas", subcategoria: "processador" },
+      { termo: "ssd nvme 1tb", categoria: "pecas", subcategoria: "ssd-hd" },
+      
+      { termo: "ps5 slim digital", categoria: "games", subcategoria: "console" },
+      { termo: "nintendo switch oled", categoria: "games", subcategoria: "console" },
+      
+      { termo: "monitor gamer 144hz ips", categoria: "acessorios", subcategoria: "monitor" },
+      { termo: "headset gamer sem fio", categoria: "acessorios", subcategoria: "headset" }
     ];
 
+    // Variáveis (Português)
     let { termo, categoria, subcategoria, limit = 3 } = body;
 
-    // Se não veio termo (chamada automática do CronJob), sorteia um!
+    // Lógica do CronJob
     if (!termo) {
         const sorteado = listaAutomatica[Math.floor(Math.random() * listaAutomatica.length)];
         termo = sorteado.termo;
         categoria = sorteado.categoria;
         subcategoria = sorteado.subcategoria;
-        console.log(`🎲 Sorteio Automático: "${termo}"`);
+        limit = 3; 
+        console.log(`⏰ CronJob: Sorteado "${termo}"`);
+    } else {
+        console.log(`🔎 Busca Manual: "${termo}"`);
     }
 
-    // OTIMIZAÇÃO DE BUSCA (IA)
+    // Fallback
+    if (!categoria) categoria = 'notebooks';
+
+    // 3. IA: OTIMIZAÇÃO DE BUSCA (A que você gostou!)
     let termoDeBusca = termo;
     try {
-        const promptSearch = `Otimize o termo "${termo}" para busca no Mercado Livre (ex: tire 'barato'). Responda SÓ o termo.`;
+        const promptSearch = `
+        Atue como um especialista em busca do Mercado Livre.
+        O usuário digitou: "${termo}".
+        Converta isso em um termo de busca OTIMIZADO e TÉCNICO para encontrar os melhores produtos.
+        Exemplo: "pc que roda tudo" -> "pc gamer completo i7 rtx"
+        Exemplo: "mouse pra jogar cs" -> "mouse gamer logitech 12000dpi"
+        Responda APENAS o termo novo, sem aspas, sem explicações.
+        `;
         const resultSearch = await model.generateContent(promptSearch);
         termoDeBusca = resultSearch.response.text().trim();
+        console.log(`🧠 IA traduziu "${termo}" para -> "${termoDeBusca}"`);
     } catch (e) {
-        console.log("IA falhou na otimização, usando original.");
+        console.log("Falha na tradução da busca, usando termo original.");
     }
 
-    // PUPPETEER
+    // 4. Puppeteer
     browser = await puppeteer.launch({
       headless: "new", 
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
@@ -126,84 +98,141 @@ export async function POST(req) {
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
     const url = `https://lista.mercadolivre.com.br/${termoDeBusca.replace(/ /g, "-")}_NoIndex_True`;
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
     
-    await page.evaluate(() => window.scrollBy(0, 500)); 
-    await new Promise(r => setTimeout(r, 1000));
+    // Espera inteligente (Evita 0 resultados)
+    try { await page.waitForSelector('.ui-search-layout__item, .poly-card, .ui-search-result__wrapper', { timeout: 6000 }); } catch(e) {}
+    
+    await page.evaluate(() => window.scrollBy(0, 500));
+    await new Promise(r => setTimeout(r, 1500));
 
-    // SCRAPING
+    // 5. Scraping com Anti-Duplicação
     const listaProdutos = await page.evaluate((limiteMax) => { 
-        const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
-        let elements = [];
-        for (const sel of seletores) {
-            const achados = document.querySelectorAll(sel);
-            if (achados.length > 0) { elements = Array.from(achados); break; }
-        }
+      const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
+      let elements = [];
+      for (const sel of seletores) {
+        const achados = document.querySelectorAll(sel);
+        if (achados.length > 0) { elements = Array.from(achados); break; }
+      }
 
-        const itensValidos = [];
-        const linksVistos = new Set();
+      const itensValidos = [];
+      const linksVistos = new Set();
+      const titulosVistos = new Set();
+      
+      for (const item of elements) {
+        if (itensValidos.length >= limiteMax) break;
         
-        for (const item of elements) {
-            if (itensValidos.length >= limiteMax) break;
-            const linkEl = item.querySelector('a');
-            if (!linkEl) continue;
-            
-            let linkOriginal = linkEl.href.split('?')[0]; 
-            if (linkOriginal.includes('click1')) continue;
-            if (linksVistos.has(linkOriginal)) continue;
-            linksVistos.add(linkOriginal);
+        const linkEl = item.querySelector('a');
+        if (!linkEl) continue;
+        
+        // Limpa Link
+        let linkOriginal = linkEl.href;
+        if (linkOriginal.includes('click1') || linkOriginal.includes('mclics')) continue;
+        let linkLimpo = linkOriginal.split('?')[0];
 
-            const priceEl = item.querySelector('.andes-money-amount__fraction');
-            const titleEl = item.querySelector('.ui-search-item__title') || item.querySelector('.poly-component__title') || item.querySelector('h2');
-            const imgEl = item.querySelector('img');
+        // Anti-Duplicação de Link
+        if (linksVistos.has(linkLimpo)) continue;
+        linksVistos.add(linkLimpo);
 
-            if (titleEl && priceEl) {
-                let preco = parseFloat(priceEl.innerText.replace(/\./g, '').replace(',', '.'));
-                let imagem = imgEl ? (imgEl.getAttribute('data-src') || imgEl.src) : "";
-                itensValidos.push({ titulo: titleEl.innerText, price: preco, originalPrice: preco * 1.2, image: imagem, link: linkOriginal });
-            }
+        // Preço
+        let currentPrice = 0;
+        let originalPrice = 0;
+        
+        const previousContainer = item.querySelector('.andes-money-amount--previous');
+        if (previousContainer) {
+            const prevVal = previousContainer.querySelector('.andes-money-amount__fraction');
+            if (prevVal) originalPrice = parseFloat(prevVal.innerText.replace(/\./g, '').replace(',', '.'));
         }
-        return itensValidos;
+        
+        const allPrices = Array.from(item.querySelectorAll('.andes-money-amount__fraction'));
+        const currentPriceEl = allPrices.find(el => !el.closest('.andes-money-amount--previous'));
+        if (currentPriceEl) currentPrice = parseFloat(currentPriceEl.innerText.replace(/\./g, '').replace(',', '.'));
+
+        const titleEl = item.querySelector('.ui-search-item__title') || item.querySelector('.poly-component__title') || item.querySelector('h2');
+        const imgEl = item.querySelector('img');
+        let titulo = titleEl ? titleEl.innerText.trim() : "";
+        
+        // Anti-Duplicação de Título (Semelhantes)
+        let tituloKey = titulo.toLowerCase().substring(0, 20);
+        if (titulosVistos.has(tituloKey)) continue;
+        titulosVistos.add(tituloKey);
+
+        let imagem = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('src') || "") : "";
+
+        if (titulo && currentPrice > 0) {
+            itensValidos.push({ titulo, price: currentPrice, originalPrice, image: imagem, link: linkLimpo });
+        }
+      }
+      return itensValidos;
     }, limit);
 
+    console.log(`🎯 Encontrados: ${listaProdutos.length} produtos únicos`);
     await browser.close();
-    browser = null; 
 
-    // SALVAMENTO COM REVIEW DA IA
+    // 6. IA: REVIEW DETALHADO (O que você gostou!)
     let salvos = 0;
     for (const produto of listaProdutos) {
-        let dadosReview = { brand: "Genérico", shortDescription: `Oferta: ${produto.titulo}`, rating: 4.5, fullReview: {} };
-        
-        try {
-            const prompt = `
-            Produto: "${produto.titulo}". Preço: R$ ${produto.price}. Categoria: ${categoria}. 
-            JSON: { "brand": "Marca", "shortDescription": "Frase curta", "fullReview": { "verdict": "Veredito", "pros": [], "cons": [], "content": "..." } }`;
-            const result = await model.generateContent(prompt);
-            const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-            dadosReview = { ...dadosReview, ...JSON.parse(text) };
-        } catch (err) {}
+      
+      // Estrutura padrão Rica
+      let dadosReview = {
+         brand: "Genérico",
+         shortDescription: `Oferta: ${produto.titulo}`,
+         rating: 4.5,
+         fullReview: { verdict: "Análise pendente", pros: ["Bom Custo"], cons: [], content: "..." }
+      };
 
-        const { error } = await supabase.from('products').insert([{
-            title: produto.titulo,
-            image: produto.image,
-            price: produto.price,
-            original_price: produto.originalPrice,
-            link: produto.link,
-            category: categoria,
-            subcategory: subcategoria,
-            brand: dadosReview.brand,
-            rating: dadosReview.rating,
-            short_description: dadosReview.shortDescription,
-            full_review: dadosReview.fullReview,
-            status: 'pending' // VAI PRA ABA PENDENTES
-        }]);
-        if (!error) salvos++;
+      try {
+        const prompt = `
+          Especialista Tech. Produto: "${produto.titulo}", Preço: R$ ${produto.price}.
+          Categoria: "${categoria}", Subcategoria: "${subcategoria || 'Geral'}".
+          Analise o produto.
+          
+          JSON RÍGIDO: { 
+            "brand": "Marca (ex: Samsung)",
+            "shortDescription": "frase curta vendedora", 
+            "rating": 4.5, 
+            "fullReview": { 
+                "verdict": "Veredito final curto", 
+                "pros": ["Ponto positivo 1", "Ponto positivo 2", "Ponto positivo 3"], 
+                "cons": ["Ponto negativo"], 
+                "content": "Resumo detalhado em 1 parágrafo explicando se vale a pena." 
+            } 
+          }
+        `;
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").replace(/\*\*/g, "").trim();
+        dadosReview = { ...dadosReview, ...JSON.parse(text) };
+      } catch (err) { console.error("Erro IA Review:", err.message); }
+
+      const precoDe = (produto.originalPrice > produto.price) ? produto.originalPrice : (produto.price * 1.25); 
+
+      const { error } = await supabase.from('products').insert([{
+        title: produto.titulo,
+        image: produto.image,
+        price: produto.price,
+        original_price: precoDe,
+        link: produto.link,
+        
+        // Mapeando variáveis corretas
+        category: categoria,
+        subcategory: subcategoria || null,
+        
+        brand: dadosReview.brand, 
+        rating: Number(dadosReview.rating),
+        short_description: dadosReview.shortDescription,
+        full_review: dadosReview.fullReview,
+        
+        status: 'pending'
+      }]);
+
+      if (!error) salvos++;
     }
 
-    return NextResponse.json({ success: true, message: `Auto-piloto: ${salvos} novos produtos de ${termo} salvos.` });
+    return NextResponse.json({ success: true, message: `${salvos} processados. (Busca usada: ${termoDeBusca})` });
 
   } catch (error) {
     if (browser) await browser.close();
+    console.error("🚨 Erro Fatal:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
