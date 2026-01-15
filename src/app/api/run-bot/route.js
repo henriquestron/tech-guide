@@ -20,7 +20,7 @@ export async function POST(req) {
     );
     
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Atualizei para o modelo mais estável
 
     // 2. Leitura do Body
     let body = {};
@@ -52,7 +52,7 @@ export async function POST(req) {
       { termo: "headset gamer sem fio", categoria: "acessorios", subcategoria: "headset" }
     ];
 
-    // Variáveis (Português)
+    // Variáveis
     let { termo, categoria, subcategoria, limit = 3 } = body;
 
     // Lógica do CronJob
@@ -67,19 +67,16 @@ export async function POST(req) {
         console.log(`🔎 Busca Manual: "${termo}"`);
     }
 
-    // Fallback
     if (!categoria) categoria = 'notebooks';
 
-    // 3. IA: OTIMIZAÇÃO DE BUSCA (A que você gostou!)
+    // 3. IA: OTIMIZAÇÃO DE BUSCA
     let termoDeBusca = termo;
     try {
         const promptSearch = `
         Atue como um especialista em busca do Mercado Livre.
         O usuário digitou: "${termo}".
-        Converta isso em um termo de busca OTIMIZADO e TÉCNICO para encontrar os melhores produtos.
-        Exemplo: "pc que roda tudo" -> "pc gamer completo i7 rtx"
-        Exemplo: "mouse pra jogar cs" -> "mouse gamer logitech 12000dpi"
-        Responda APENAS o termo novo, sem aspas, sem explicações.
+        Converta isso em um termo de busca OTIMIZADO e TÉCNICO.
+        Responda APENAS o termo novo, sem aspas.
         `;
         const resultSearch = await model.generateContent(promptSearch);
         termoDeBusca = resultSearch.response.text().trim();
@@ -88,7 +85,8 @@ export async function POST(req) {
         console.log("Falha na tradução da busca, usando termo original.");
     }
 
-    // 4. Puppeteer
+    // 4. Puppeteer (Simula Navegador)
+    // Nota: Se rodar na Vercel Free, o Puppeteer pode ser pesado. No Render funciona melhor.
     browser = await puppeteer.launch({
       headless: "new", 
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
@@ -100,13 +98,12 @@ export async function POST(req) {
     const url = `https://lista.mercadolivre.com.br/${termoDeBusca.replace(/ /g, "-")}_NoIndex_True`;
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
     
-    // Espera inteligente (Evita 0 resultados)
     try { await page.waitForSelector('.ui-search-layout__item, .poly-card, .ui-search-result__wrapper', { timeout: 6000 }); } catch(e) {}
     
     await page.evaluate(() => window.scrollBy(0, 500));
     await new Promise(r => setTimeout(r, 1500));
 
-    // 5. Scraping com Anti-Duplicação
+    // 5. Scraping
     const listaProdutos = await page.evaluate((limiteMax) => { 
       const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
       let elements = [];
@@ -128,9 +125,8 @@ export async function POST(req) {
         // Limpa Link
         let linkOriginal = linkEl.href;
         if (linkOriginal.includes('click1') || linkOriginal.includes('mclics')) continue;
-        let linkLimpo = linkOriginal.split('?')[0];
+        let linkLimpo = linkOriginal.split('?')[0]; // Remove rastreio, deixa link puro
 
-        // Anti-Duplicação de Link
         if (linksVistos.has(linkLimpo)) continue;
         linksVistos.add(linkLimpo);
 
@@ -152,7 +148,7 @@ export async function POST(req) {
         const imgEl = item.querySelector('img');
         let titulo = titleEl ? titleEl.innerText.trim() : "";
         
-        // Anti-Duplicação de Título (Semelhantes)
+        // Anti-Duplicação de Título
         let tituloKey = titulo.toLowerCase().substring(0, 20);
         if (titulosVistos.has(tituloKey)) continue;
         titulosVistos.add(tituloKey);
@@ -169,11 +165,10 @@ export async function POST(req) {
     console.log(`🎯 Encontrados: ${listaProdutos.length} produtos únicos`);
     await browser.close();
 
-    // 6. IA: REVIEW DETALHADO (O que você gostou!)
+    // 6. IA: REVIEW + SALVAMENTO (Aqui está a alteração!)
     let salvos = 0;
     for (const produto of listaProdutos) {
       
-      // Estrutura padrão Rica
       let dadosReview = {
          brand: "Genérico",
          shortDescription: `Oferta: ${produto.titulo}`,
@@ -185,18 +180,11 @@ export async function POST(req) {
         const prompt = `
           Especialista Tech. Produto: "${produto.titulo}", Preço: R$ ${produto.price}.
           Categoria: "${categoria}", Subcategoria: "${subcategoria || 'Geral'}".
-          Analise o produto.
-          
-          JSON RÍGIDO: { 
-            "brand": "Marca (ex: Samsung)",
-            "shortDescription": "frase curta vendedora", 
+          Analise o produto. JSON RÍGIDO: { 
+            "brand": "Marca",
+            "shortDescription": "frase curta", 
             "rating": 4.5, 
-            "fullReview": { 
-                "verdict": "Veredito final curto", 
-                "pros": ["Ponto positivo 1", "Ponto positivo 2", "Ponto positivo 3"], 
-                "cons": ["Ponto negativo"], 
-                "content": "Resumo detalhado em 1 parágrafo explicando se vale a pena." 
-            } 
+            "fullReview": { "verdict": "...", "pros": [], "cons": [], "content": "..." } 
           }
         `;
         const result = await model.generateContent(prompt);
@@ -206,26 +194,31 @@ export async function POST(req) {
 
       const precoDe = (produto.originalPrice > produto.price) ? produto.originalPrice : (produto.price * 1.25); 
 
-      const { error } = await supabase.from('products').insert([{
-        title: produto.titulo,
-        image: produto.image,
-        price: produto.price,
-        original_price: precoDe,
-        link: produto.link,
-        
-        // Mapeando variáveis corretas
-        category: categoria,
-        subcategory: subcategoria || null,
-        
-        brand: dadosReview.brand, 
-        rating: Number(dadosReview.rating),
-        short_description: dadosReview.shortDescription,
-        full_review: dadosReview.fullReview,
-        
-        status: 'pending'
-      }]);
+      // Verifica se já existe pelo link original
+      const { data: existente } = await supabase.from('products').select('id').eq('original_link', produto.link).single();
 
-      if (!error) salvos++;
+      if (!existente) {
+          const { error } = await supabase.from('products').insert([{
+            title: produto.titulo,
+            image: produto.image,
+            price: produto.price,
+            original_price: precoDe,
+            
+            // 👇 AQUI A MÁGICA: SALVA NAS DUAS COLUNAS 👇
+            link: produto.link,           // Este você muda depois para afiliado
+            original_link: produto.link,  // Este fica intacto para o robô checar preço
+            
+            category: categoria,
+            subcategory: subcategoria || null,
+            brand: dadosReview.brand, 
+            rating: Number(dadosReview.rating),
+            short_description: dadosReview.shortDescription,
+            full_review: dadosReview.fullReview,
+            status: 'pending'
+          }]);
+
+          if (!error) salvos++;
+      }
     }
 
     return NextResponse.json({ success: true, message: `${salvos} processados. (Busca usada: ${termoDeBusca})` });
