@@ -25,10 +25,36 @@ async function getAccessToken() {
 
 export async function POST(req) { 
   try {
-    // 1. Verificações de Segurança
-    if (!process.env.GEMINI_API_KEY) return NextResponse.json({ error: "Gemini Key missing" }, { status: 500 });
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return NextResponse.json({ error: "Supabase URL missing" }, { status: 500 });
-    if (!process.env.ML_APP_ID || !process.env.ML_SECRET_KEY) return NextResponse.json({ error: "Mercado Livre Credenciais missing" }, { status: 500 });
+    // --- 🕵️ ÁREA DE DIAGNÓSTICO (DETETIVE) ---
+    const errosDeConfig = [];
+    
+    // Testa cada chave individualmente
+    if (!process.env.GEMINI_API_KEY) errosDeConfig.push("Falta: GEMINI_API_KEY");
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) errosDeConfig.push("Falta: NEXT_PUBLIC_SUPABASE_URL");
+    
+    // Testa as do Mercado Livre e mostra o que tem (sem mostrar a senha)
+    if (!process.env.ML_APP_ID) {
+        errosDeConfig.push("Falta: ML_APP_ID");
+    } else {
+        console.log("ML_APP_ID detectado: " + process.env.ML_APP_ID.substring(0, 3) + "...");
+    }
+
+    if (!process.env.ML_SECRET_KEY) {
+        errosDeConfig.push("Falta: ML_SECRET_KEY");
+    } else {
+        console.log("ML_SECRET_KEY detectada!");
+    }
+
+    // Se achou erro, para tudo e avisa qual é
+    if (errosDeConfig.length > 0) {
+        return NextResponse.json({ 
+            error: "Erro de Variáveis de Ambiente", 
+            detalhes: errosDeConfig.join(', '),
+            dica: "Verifique se o nome na Vercel está IDÊNTICO ao nome acima."
+        }, { status: 500 });
+    }
+    // --- FIM DO DIAGNÓSTICO ---
+
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
