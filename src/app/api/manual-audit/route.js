@@ -17,71 +17,90 @@ export async function POST(req) {
 
     if (!id || !link) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
 
-    // 1. Tenta acessar o link
+    // 1. Tenta acessar o link (Com suporte a redirect de Afiliado)
     let html;
+    let finalUrl; 
+
     try {
         const response = await axios.get(link, {
-            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
-            timeout: 10000 
+            headers: { 
+                // User-Agent de navegador real para passar pelo rastreador de afiliado
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+            },
+            timeout: 15000, // Aumentei o tempo pois link de afiliado demora mais
+            maxRedirects: 5, // Garante que segue os redirects do afiliado
+            validateStatus: status => status < 500 // Não quebra em 404 direto, tratamos abaixo
         });
+        
         html = response.data;
+        finalUrl = response.request?.res?.responseUrl || link; // Tenta pegar a URL final onde aterrissou
+
     } catch (err) {
-        if (err.response && err.response.status === 404) {
-            await supabase.from('products').delete().eq('id', id);
-            return NextResponse.json({ status: 'deleted', reason: '404 - Página não existe' });
-        }
-        return NextResponse.json({ status: 'error', reason: 'Erro de conexão' });
+        console.error("Erro de conexão:", err.message);
+        // ⚠️ SEGURANÇA: Se deu erro de conexão, NÃO DELETA. Retorna erro e mantém o produto.
+        return NextResponse.json({ status: 'error', reason: 'Erro de conexão ou timeout' });
     }
 
     const $ = cheerio.load(html);
 
-    // 2. Verifica se está PAUSADO
-    const avisoPausado = $('.ui-pdp-promotions-pill-label--paused, .ui-pdp-message--paused, .ui-pdp-container__row--start-stopped').length > 0;
-    const titulo = $('h1').text();
-    
-    if (avisoPausado || (!titulo && html.includes("não existe"))) {
-        await supabase.from('products').delete().eq('id', id);
-        return NextResponse.json({ status: 'deleted', reason: 'Anúncio Pausado/Finalizado' });
+    // 2. Verifica se a página carregou errado (Captcha ou Bloqueio)
+    // Se cair num captcha, o título geralmente não existe, mas não queremos deletar o produto!
+    const isCaptcha = $('body').text().includes("human") || $('body').text().includes("verificar se você é humano");
+    if (isCaptcha) {
+        return NextResponse.json({ status: 'skipped', reason: 'Bloqueio/Captcha detectado - Produto mantido' });
     }
 
-    // 3. LÓGICA INTELIGENTE DE PREÇO (PROMOÇÃO VS NORMAL) 🧠
+    // 3. Verifica se está REALMENTE PAUSADO/FINALIZADO
+    // Procuramos classes específicas que indicam morte do anúncio
+    const avisoPausado = $('.ui-pdp-promotions-pill-label--paused, .ui-pdp-message--paused, .ui-pdp-container__row--start-stopped').length > 0;
+    const textoFinalizado = html.includes("Anúncio pausado") || html.includes("Este anúncio não existe mais");
+    
+    // Tenta pegar o título
+    const titulo = $('h1').text().trim();
+
+    // 🚨 MUDANÇA CRÍTICA AQUI:
+    // Antes você deletava se (!titulo). Agora só deletamos se tiver CERTEZA que morreu.
+    // Se não tiver título mas também não tiver aviso de pausado, pode ser só erro do robô no link de afiliado.
+    if (avisoPausado || (textoFinalizado && !titulo)) {
+        await supabase.from('products').delete().eq('id', id);
+        return NextResponse.json({ status: 'deleted', reason: 'Anúncio Pausado/Finalizado com certeza' });
+    }
+
+    // Se não achou título e nem preço, mas não está pausado, aborta (não mexe no banco)
+    if (!titulo) {
+        return NextResponse.json({ status: 'skipped', reason: 'Página não carregou corretamente (Link Afiliado?) - Produto mantido' });
+    }
+
+    // 4. LÓGICA DE PREÇO (MANTIDA IGUAL)
     let precoReal = 0;
     
-    // Tentativa A: Meta Tag (O jeito mais seguro, pois o ML declara o preço oficial pro Google aqui)
     const metaPrice = $('meta[itemprop="price"]').attr('content');
     if (metaPrice) {
         precoReal = parseFloat(metaPrice);
     } else {
-        // Tentativa B: Scraping Visual (Ignorando o preço riscado)
-        // Pegamos todos os preços, mas filtramos fora os que estão dentro de container "previous" (riscado)
         $('.andes-money-amount__fraction').each((i, el) => {
             const container = $(el).closest('.andes-money-amount');
-            
-            // Se NÃO tem a classe "previous" (riscado), então é o preço atual!
             if (!container.hasClass('andes-money-amount--previous')) {
                 const texto = $(el).text();
                 precoReal = parseFloat(texto.replace(/\./g, "").replace(",", "."));
-                return false; // Para o loop assim que achar o primeiro preço válido
+                return false; 
             }
         });
     }
 
     // Se achou um preço válido
     if (precoReal > 0) {
-        // Se o preço mudou
         if (precoReal !== price) {
             
-            // Regra de Segurança: Se subiu MUITO (50%), avisa mas não atualiza sozinho (vai pra pendente)
-            // Ex: Era 3200 (promoção), acabou a promoção e foi pra 5000. Você precisa saber.
+            // Regra de variação brusca (segurança)
             if (precoReal > price * 1.5) {
                 await supabase.from('products').update({ price: precoReal, status: 'pending' }).eq('id', id);
                 return NextResponse.json({ status: 'changed_pending', old: price, new: precoReal });
             } else {
-                // Se baixou (promoção nova) ou subiu pouco, atualiza direto
-                // Também tentamos pegar o preço original (riscado) para atualizar o "De: X Por: Y"
-                let originalPrice = precoReal * 1.2; // Chute padrão
+                let originalPrice = precoReal * 1.25; 
 
-                // Tenta achar o preço riscado real na tela
                 const precoRiscadoEl = $('.andes-money-amount--previous .andes-money-amount__fraction').first();
                 if (precoRiscadoEl.length > 0) {
                     originalPrice = parseFloat(precoRiscadoEl.text().replace(/\./g, "").replace(",", "."));
@@ -97,10 +116,11 @@ export async function POST(req) {
         }
     }
 
-    return NextResponse.json({ status: 'ok' });
+    return NextResponse.json({ status: 'ok', message: 'Preço inalterado' });
 
   } catch (error) {
     console.error("Erro Auditor:", error);
+    // Em caso de erro fatal no código, não deleta nada
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
