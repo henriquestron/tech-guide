@@ -7,7 +7,7 @@ export async function GET() {
   const { verifier, challenge } = generatePKCE();
 
   const redirectUrl =
-    "https://auth.mercadolibre.com.br/authorization" +
+    "https://auth.mercadolivre.com.br/authorization" +
     `?response_type=code` +
     `&client_id=${process.env.ML_APP_ID}` +
     `&redirect_uri=${encodeURIComponent("https://www.techguidebr.com.br/api/ml/callback")}` +
