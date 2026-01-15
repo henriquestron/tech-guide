@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { generatePKCE } from "@/lib/ml-pkce";
 import { cookies } from "next/headers";
