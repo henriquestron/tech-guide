@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60; 
 
 // ⚠️ SUA PARTE: Cole o código novo TG que você pegar no navegador aqui
-const CODIGO_INICIAL_TG = "TG-696928da1e32c10001c411a3-1094234467"; 
+const CODIGO_INICIAL_TG = "TG-69692a6c0662eb000183eddf-1094234467"; 
 
 // --- 🔐 COFRE DE CREDENCIAIS ---
 async function getCredentials(supabase) {
