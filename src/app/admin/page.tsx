@@ -199,7 +199,7 @@ export default function AdminPanel() {
         });
         const data = await res.json();
         if (res.ok && data.success) addLog(`✅ Sucesso: ${data.message}`);
-        else addLog(`❌ Erro: ${data.error}\n⚠️ Culpado: ${data.detalhes || 'Sem detalhes'}\n💡 Dica: ${data.dica || ''}`);
+        else addLog(`❌ Erro: ${data.error || 'Falha desconhecida'}`);
       } catch (err: any) { addLog(`❌ Erro de conexão: ${err.message}`); }
       await new Promise(r => setTimeout(r, 1000));
     }

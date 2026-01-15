@@ -1,8 +1,21 @@
-export const dynamic = 'force-dynamic'; // Importante: Garante que a página admin nunca faça cache
+import { notFound } from "next/navigation";
+
+// --- CORREÇÃO OBRIGATÓRIA ---
+// Isso força o Next.js a ler a variável de ambiente EM TEMPO REAL,
+// impedindo que ele gere uma página estática "404" na hora do build.
+export const dynamic = 'force-dynamic';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  // A trava de segurança antiga (IS_ROBOT_SERVER) foi removida.
-  // Agora, qualquer um pode acessar a URL /admin, mas só quem tem a senha
-  // (validada no page.tsx) vai ver o painel.
+  const isRobotServer = process.env.IS_ROBOT_SERVER === "true";
+  const isLocalhost = process.env.NODE_ENV === "development";
+
+  // --- DEBUG NO LOG DO RENDER ---
+  // Se ainda der erro, vá na aba "Logs" do Render e veja o que aparece aqui.
+  console.log(`🔒 ADMIN CHECK: Localhost=${isLocalhost} | RobotServer=${isRobotServer} (Valor real: ${process.env.IS_ROBOT_SERVER})`);
+
+  if (!isRobotServer && !isLocalhost) {
+    return notFound(); 
+  }
+
   return <>{children}</>;
 }
