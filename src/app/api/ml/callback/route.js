@@ -1,4 +1,5 @@
 export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
@@ -15,31 +16,5 @@ export async function GET(req) {
     );
   }
 
-  const res = await fetch("https://api.mercadolibre.com/oauth/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: process.env.ML_APP_ID,
-      client_secret: process.env.ML_SECRET_KEY,
-      code,
-      redirect_uri: "https://www.techguidebr.com.br/api/ml/callback",
-      code_verifier: verifier
-    })
-  });
-
-  const data = await res.json();
-
-  if (!res.ok) {
-    return NextResponse.json(data, { status: 500 });
-  }
-
-  return NextResponse.json({
-    success: true,
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    expires_in: data.expires_in
-  });
+  // troca token aqui...
 }
