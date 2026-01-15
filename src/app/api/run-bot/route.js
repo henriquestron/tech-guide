@@ -5,15 +5,23 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; 
 
-// ⚠️ PASSO CRUCIAL:
-// Cole aqui o NOVO código TG que você vai gerar no navegador com o App Novo.
-const CODIGO_INICIAL_TG = "TG-69692efc1160080001fb61db-1094234467"; 
+// ⚠️ COLE SEU CÓDIGO TG NOVO AQUI
+const CODIGO_INICIAL_TG = "TG-6969307506aefe0001d7d147-1094234467"; 
 
-// --- 🔐 COFRE (Lê ID e Secret do Supabase) ---
+// --- 🕵️ CAMUFLAGEM (Essencial para não ser bloqueado pela Vercel) ---
+const HEADERS_NAVEGADOR = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': 'https://www.mercadolivre.com.br/',
+    'Cache-Control': 'no-cache'
+};
+
+// --- 🔐 COFRE ---
 async function getCredentials(supabase) {
     const { data, error } = await supabase.from('ml_tokens').select('app_id, app_secret').limit(1).single();
     if (error || !data || !data.app_id || !data.app_secret) {
-        throw new Error("Credenciais não encontradas no Supabase. Rode o SQL de UPDATE.");
+        throw new Error("Credenciais não encontradas no Supabase.");
     }
     return { appId: data.app_id, appSecret: data.app_secret };
 }
@@ -23,30 +31,23 @@ async function getValidToken(supabase) {
   const { data } = await supabase.from('ml_tokens').select('*').limit(1).single();
   const creds = await getCredentials(supabase);
 
-  // 1. Primeira vez (Troca Código TG por Token)
   if ((!data || !data.access_token || data.access_token === 'vazio') && CODIGO_INICIAL_TG && CODIGO_INICIAL_TG.startsWith("TG-")) {
       console.log("🔄 Primeira Configuração: Trocando Código TG por Token...");
       return await exchangeCodeForToken(supabase, CODIGO_INICIAL_TG, creds);
   }
 
-  // 2. Testa token atual
   if (data && data.access_token) {
-      const isValid = await testToken(data.access_token);
-      if (isValid) return data.access_token;
+      // Testa validade
+      try {
+          const res = await fetch(`https://api.mercadolibre.com/users/me`, {
+              headers: { Authorization: `Bearer ${data.access_token}` }
+          });
+          if (res.status === 200) return data.access_token;
+      } catch (e) {}
   }
 
-  // 3. Renova (Refresh)
   console.log("⚠️ Token expirado. Renovando...");
   return await refreshToken(supabase, data.refresh_token, creds);
-}
-
-async function testToken(token) {
-    try { // Testa leve com user info
-        const res = await fetch(`https://api.mercadolibre.com/users/me`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        return res.status === 200;
-    } catch (e) { return false; }
 }
 
 async function exchangeCodeForToken(supabase, code, creds) {
@@ -57,9 +58,10 @@ async function exchangeCodeForToken(supabase, code, creds) {
     params.append('code', code);
     params.append('redirect_uri', 'https://techguidebr.com.br'); 
 
-    const res = await fetch('https://api.mercadolibre.com/oauth/token', { method: 'POST', body: params });
+    const res = await fetch('https://api.mercadolibre.com/oauth/token', { 
+        method: 'POST', body: params, headers: HEADERS_NAVEGADOR 
+    });
     const data = await res.json();
-
     if (data.error) throw new Error(`Erro Auth Inicial: ${data.message || data.error}`);
     
     await supabase.from('ml_tokens').update({ 
@@ -75,9 +77,10 @@ async function refreshToken(supabase, refreshTokenStr, creds) {
     params.append('client_secret', creds.appSecret);
     params.append('refresh_token', refreshTokenStr);
 
-    const res = await fetch('https://api.mercadolibre.com/oauth/token', { method: 'POST', body: params });
+    const res = await fetch('https://api.mercadolibre.com/oauth/token', { 
+        method: 'POST', body: params, headers: HEADERS_NAVEGADOR 
+    });
     const data = await res.json();
-
     if (data.error) throw new Error(`Erro Refresh: ${data.message || data.error}`);
 
     await supabase.from('ml_tokens').update({ 
@@ -96,7 +99,7 @@ export async function POST(req) {
     let body = {};
     try { body = await req.json(); } catch (e) {}
     
-    // Lista Automática (Fallback)
+    // Lista de fallback
     const listaAutomatica = [ { termo: "iphone 13", categoria: "celulares", subcategoria: "iphone" }, { termo: "ps5", categoria: "games", subcategoria: "console" } ];
     let { termo, categoria, subcategoria, limit = 3 } = body;
     if (!termo) {
@@ -105,45 +108,45 @@ export async function POST(req) {
     }
     if (!categoria) categoria = 'notebooks';
 
-    // --- BUSCA HÍBRIDA (TOKEN OU PÚBLICA) ---
+    // --- LÓGICA DE BUSCA BLINDADA ---
     let token = null;
     let resultados = [];
     
-    // 1. Tenta pegar Token
-    try {
-        token = await getValidToken(supabase);
-    } catch (e) {
-        console.log("⚠️ Falha no Auth (Seguindo sem token):", e.message);
-    }
+    // 1. Tenta pegar Token (mas não morre se falhar)
+    try { token = await getValidToken(supabase); } catch (e) { console.log("⚠️ Falha Token:", e.message); }
 
     const searchUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termo)}&limit=${limit}&condition=new&sort=price_asc`;
     
-    // 2. Tenta Busca COM Token
+    // 2. Tenta busca OFICIAL (Com Token)
     let buscaSucesso = false;
     if (token) {
-        console.log("🔌 Tentando busca autenticada...");
-        const res = await fetch(searchUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+        console.log("🔌 Tentando via Token...");
+        const res = await fetch(searchUrl, { 
+            headers: { ...HEADERS_NAVEGADOR, 'Authorization': `Bearer ${token}` } 
+        });
         if (res.ok) {
             const data = await res.json();
             resultados = data.results || [];
             buscaSucesso = true;
-        } else {
-            console.log(`⚠️ Erro Auth (${res.status}). Tentando modo público...`);
         }
     }
 
-    // 3. Se falhou ou não tem token -> Busca PÚBLICA (Backup)
+    // 3. Tenta busca CAMUFLADA (Sem Token - Backup)
     if (!buscaSucesso) {
-        console.log("🌍 Usando busca pública (Backup)...");
-        const res = await fetch(searchUrl); // Sem header Authorization
-        if (!res.ok) throw new Error(`Erro ML API Público: ${res.statusText}`);
+        console.log("🌍 Ativando Camuflagem (Modo Público)...");
+        const res = await fetch(searchUrl, { headers: HEADERS_NAVEGADOR });
+        
+        if (!res.ok) {
+            const erro = await res.text();
+            throw new Error(`Erro ML (Blindado falhou): ${res.status} - ${erro}`);
+        }
         const data = await res.json();
         resultados = data.results || [];
     }
 
-    console.log(`🎯 ML Retornou: ${resultados.length} produtos.`);
+    console.log(`🎯 Produtos encontrados: ${resultados.length}`);
 
-    // 4. IA + Salvamento
+    // 4. IA GEMINI (Versão Completa e Detalhada)
     let salvos = 0;
     for (const item of resultados) {
       const titulo = item.title;
@@ -153,26 +156,76 @@ export async function POST(req) {
       const brandAPI = item.attributes?.find(a => a.id === 'BRAND')?.value_name || "Genérico";
       const originalPrice = item.original_price || (price * 1.25); 
 
-      let dadosReview = { brand: brandAPI, shortDescription: `Oferta: ${titulo}`, rating: 4.5, fullReview: {} };
+      let dadosReview = {
+         brand: brandAPI,
+         shortDescription: `Oferta imperdível de ${titulo}`,
+         rating: 4.5,
+         fullReview: { 
+             verdict: "Análise em andamento", 
+             pros: ["Preço Competitivo"], 
+             cons: [], 
+             content: "Produto sendo analisado pela nossa equipe." 
+         }
+      };
 
       try {
-        const prompt = `Analise tech: "${titulo}" - R$ ${price}. JSON RÍGIDO: { "shortDescription": "frase curta", "rating": 4.5, "fullReview": { "verdict": "...", "pros": [], "cons": [], "content": "..." } }`;
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-        dadosReview = { ...dadosReview, ...JSON.parse(text), brand: brandAPI };
-      } catch (err) {}
+        // PROMPT COMPLETO E DETALHADO
+        const promptReview = `
+          Você é um especialista sênior em Tecnologia e Hardware.
+          Analise o produto: "${titulo}"
+          Marca: "${brandAPI}"
+          Preço Atual: R$ ${price}
+          Categoria: ${categoria}
+          
+          Gere um JSON RÍGIDO (sem markdown, sem blocos de código) com esta estrutura exata:
+          { 
+            "shortDescription": "Uma frase de impacto comercial curta (max 60 caracteres)", 
+            "rating": 4.5, 
+            "fullReview": { 
+                "verdict": "Veredito direto: Vale a pena comprar por esse preço? (Sim/Não/Talvez)", 
+                "pros": ["Ponto positivo técnico 1", "Ponto positivo técnico 2", "Ponto positivo 3"], 
+                "cons": ["Ponto negativo ou alerta (se houver)"], 
+                "content": "Um parágrafo de 3 a 4 linhas descrevendo o desempenho, qualidade de construção e para quem esse produto é indicado." 
+            } 
+          }
+        `;
+        
+        const reviewResult = await model.generateContent(promptReview);
+        const textReview = reviewResult.response.text()
+            .replace(/```json/g, "")
+            .replace(/```/g, "")
+            .trim();
+            
+        const jsonReview = JSON.parse(textReview);
+        dadosReview = { ...dadosReview, ...jsonReview, brand: brandAPI };
+        
+      } catch (err) {
+          console.error("⚠️ Erro na IA (usando fallback):", err.message);
+      }
 
+      // Salva no Supabase
       const { data: existente } = await supabase.from('products').select('id').eq('link', link).single();
       if (!existente) {
           const { error } = await supabase.from('products').insert([{
-            title: titulo, image, price, original_price: originalPrice, link, category, subcategory,
-            brand: dadosReview.brand, rating: Number(dadosReview.rating), short_description: dadosReview.shortDescription, full_review: dadosReview.fullReview, status: 'pending'
+            title: titulo,
+            image: image,
+            price: price,
+            original_price: originalPrice,
+            link: link,
+            category: categoria,
+            subcategory: subcategoria || null,
+            brand: dadosReview.brand,
+            rating: Number(dadosReview.rating),
+            short_description: dadosReview.shortDescription,
+            full_review: dadosReview.fullReview,
+            status: 'pending'
           }]);
+
           if (!error) salvos++;
       }
     }
 
-    return NextResponse.json({ success: true, message: `${salvos} produtos processados (Blindado)!` });
+    return NextResponse.json({ success: true, message: `${salvos} produtos processados com IA Completa!` });
 
   } catch (error) {
     console.error("🚨 Erro Fatal:", error);
