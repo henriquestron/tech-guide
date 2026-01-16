@@ -2,18 +2,13 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabaseClient";
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
-  // VOLTAMOS AO MODO SEGURO: Ler da Variável de Ambiente
   const apiKey = process.env.GEMINI_API_KEY;
 
-  console.log("--- DEBUG IA START ---");
-  
   if (!apiKey) {
-    console.error("❌ ERRO CRÍTICO: GEMINI_API_KEY não encontrada nas variáveis de ambiente!");
     return NextResponse.json({ error: "Configuração de API Key ausente." }, { status: 500 });
-  } else {
-    // Log seguro: mostra só o começo para você saber que leu a chave certa
-    console.log(`✅ Chave lida da Vercel. Inicia com: ${apiKey.substring(0, 4)}...`);
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -21,80 +16,83 @@ export async function POST(req: Request) {
   try {
     const { message } = await req.json();
 
-    // 1. BUSCAR PRODUTOS NO SUPABASE
+    // 1. AUMENTAR O LIMITE DE BUSCA
+    // Aumentamos para 200 para a IA ter peças suficientes para montar um PC inteiro.
     const { data: products, error } = await supabase
       .from('products')
-      .select('id, title, price, category, subcategory, brand, short_description, rating')
-      .limit(50);
+      .select('id, title, price, category, subcategory, brand, short_description')
+      .limit(200); 
 
     if (error) {
-      console.error("❌ Erro Supabase:", error);
-      return NextResponse.json({ error: "Erro ao buscar produtos: " + error.message }, { status: 500 });
+      console.error("Erro Supabase:", error);
+      return NextResponse.json({ error: "Erro ao buscar produtos." }, { status: 500 });
     }
 
     if (!products || products.length === 0) {
-      console.warn("⚠️ A busca no Supabase retornou 0 produtos.");
       return NextResponse.json({ recommendations: [] });
     }
 
     // 2. PREPARAR O CONTEXTO
     const catalogContext = products.map((p: any) => 
-      `ID: ${p.id} | Produto: ${p.title} | Preço: R$${p.price} | Categoria: ${p.category} > ${p.subcategory || ''} | Marca: ${p.brand || 'N/A'} | Info: ${p.short_description}`
+      `[ID: ${p.id}] ITEM: ${p.title} | PREÇO: R$${p.price} | TIPO: ${p.subcategory || p.category} | MARCA: ${p.brand}`
     ).join("\n");
 
+    // 3. PROMPT "PC BUILDER"
     const SYSTEM_PROMPT = `
-    Você é um especialista em vendas do site "Tech Guide".
-    Abaixo está a lista REAL de produtos disponíveis no nosso estoque:
-
-    --- INÍCIO DO CATÁLOGO ---
-    ${catalogContext}
-    --- FIM DO CATÁLOGO ---
-
-    SUA MISSÃO:
-    Analise o pedido do usuário: "${message}".
-    Escolha de 1 a 3 produtos dessa lista que melhor atendem ao pedido.
+    Você é o especialista em hardware do site "Tech Guide".
     
-    CRITÉRIOS DE ESCOLHA:
-    - Se o usuário pedir "barato", priorize preço baixo.
-    - Se pedir "melhor" ou "top", priorize rating e specs na descrição.
-    - Se pedir marca específica (ex: Logitech), filtre pela marca.
+    ESTOQUE DISPONÍVEL (CATÁLOGO REAL):
+    ---
+    ${catalogContext}
+    ---
 
-    REGRAS DE RESPOSTA (JSON):
-    Retorne APENAS um JSON com este formato exato:
+    PEDIDO DO USUÁRIO: "${message}"
+
+    SUA MISSÃO (RACIOCÍNIO):
+    1. Identifique a intenção do usuário:
+       - TIPO A: Busca simples (ex: "melhor mouse", "celular barato"). -> Escolha 1 a 3 melhores opções.
+       - TIPO B: Montagem de PC/Setup (ex: "monte um pc gamer até 3000", "kit upgrade", "setup completo"). -> Escolha TODAS as peças necessárias disponíveis no catálogo para formar o computador funcional.
+
+    REGRAS PARA MONTAGEM DE PC (TIPO B):
+    - Tente selecionar: 1 Processador, 1 Placa-mãe, 1 Memória RAM (ou 2, se necessário), 1 Armazenamento (SSD), 1 Placa de Vídeo (se o orçamento permitir e for gamer) e 1 Fonte.
+    - SOMA DOS PREÇOS: Você DEVE somar os preços mentalmente e tentar ficar DENTRO ou muito próximo do orçamento do usuário.
+    - COMPATIBILIDADE: Tente combinar marcas e soquetes logicamente (Ex: Se escolheu Processador Intel, não pegue placa mãe AMD, se possível). Se não tiver a peça exata perfeita, pegue a mais próxima.
+    - Se faltar alguma peça essencial no estoque (ex: não tem gabinete), ignore essa peça e monte o resto.
+
+    REGRAS DE RESPOSTA (JSON OBRIGATÓRIO):
+    Retorne APENAS um JSON puro, sem markdown, neste formato:
     {
       "recommendations": [
         { 
-          "id": "string (copie exatamente o ID do catálogo)", 
-          "name": "string (nome do produto)", 
+          "id": "string (Copie EXATAMENTE o ID do produto da lista)", 
+          "name": "string (Titulo do produto)", 
           "price": number, 
-          "reason": "string (Uma frase curta e persuasiva explicando por que você escolheu este produto)" 
+          "reason": "string (Explique pq escolheu. Ex: 'Processador excelente para jogos' ou 'Placa mãe compatível')" 
         }
       ]
     }
-    Se nenhum produto servir, retorne "recommendations": [].
     `;
 
-    // 3. CHAMAR O GEMINI
+    // 4. CHAMAR O GEMINI
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
     
-    console.log("🤖 Enviando prompt para o Gemini...");
     const result = await model.generateContent(SYSTEM_PROMPT);
     const response = await result.response;
     let text = response.text();
 
-    console.log("✅ Resposta da IA recebida!");
-
+    // Limpeza do JSON
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(text);
     
-    return NextResponse.json(data);
+    try {
+        const data = JSON.parse(text);
+        return NextResponse.json(data);
+    } catch (parseError) {
+        console.error("Erro ao fazer parse do JSON da IA:", text);
+        return NextResponse.json({ recommendations: [] });
+    }
 
   } catch (error: any) {
-    console.error('❌ Erro durante execução da IA:', error);
-    // Se o erro for de chave inválida de novo, vai aparecer aqui no log
-    return NextResponse.json({ 
-      error: "Erro interno no servidor", 
-      details: error.message || error 
-    }, { status: 500 });
+    console.error('❌ Erro IA:', error);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }
