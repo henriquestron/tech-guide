@@ -73,14 +73,39 @@ export async function POST(req) {
     let termoDeBusca = termo;
     try {
         const promptSearch = `
-        Atue como um especialista em busca do Mercado Livre.
-        O usuário digitou: "${termo}".
-        Converta isso em um termo de busca OTIMIZADO e TÉCNICO.
-        Responda APENAS o termo novo, sem aspas.
+        Você é um especialista em SEO para Mercado Livre.
+        SUA MISSÃO: Refinar o termo de busca do usuário para encontrar o PRODUTO PRINCIPAL com mais precisão, evitando acessórios ou peças (a menos que o usuário peça).
+
+        REGRAS OBRIGATÓRIAS:
+        1. MANTENHA a Marca e o Modelo exatos (Ex: Se o usuário digitou "iPhone 13", NÃO mude para "iPhone 14").
+        2. MANTENHA o Tipo de dispositivo (Ex: Se é "Notebook", NÃO mude para "PC Gamer").
+        3. ADICIONE especificações técnicas comuns se faltarem (Ex: "128gb", "ssd", "novo", "original").
+        4. EVITE termos ambíguos que tragam "capinhas" ou "películas" se o usuário busca o celular.
+
+        EXEMPLOS DE OTIMIZAÇÃO:
+        Input: "iphone 13" -> Output: iphone 13 128gb original vitrine
+        Input: "notebook dell i5" -> Output: notebook dell core i5 ssd 8gb
+        Input: "ps5" -> Output: playstation 5 console original
+        Input: "placa de video 3060" -> Output: placa video rtx 3060 12gb
+        Input: "mouse logitech" -> Output: mouse gamer logitech g series
+
+        O usuário digitou: "${termo}"
+        Responda APENAS o termo novo, sem aspas, sem explicações.
         `;
+        
         const resultSearch = await model.generateContent(promptSearch);
-        termoDeBusca = resultSearch.response.text().trim();
-        console.log(`🧠 IA traduziu "${termo}" para -> "${termoDeBusca}"`);
+        const sugestao = resultSearch.response.text().trim();
+        
+        // Verificação de segurança simples:
+        // Se a IA alucinar e mudar a marca principal (ex: trocar Apple por Samsung), ignoramos.
+        const termoOriginalBasico = termo.split(' ')[0].toLowerCase();
+        if (sugestao.toLowerCase().includes(termoOriginalBasico)) {
+            termoDeBusca = sugestao;
+            console.log(`🧠 IA refinou "${termo}" para -> "${termoDeBusca}"`);
+        } else {
+            console.log(`⚠️ IA tentou mudar o produto ("${sugestao}"). Mantendo original.`);
+        }
+
     } catch (e) {
         console.log("Falha na tradução da busca, usando termo original.");
     }
