@@ -89,6 +89,9 @@ const categories: CategoryItem[] = [
       { name: 'Mouses', slug: 'mouse' },
       { name: 'Teclados', slug: 'teclado' },
       { name: 'Headsets', slug: 'headset' },
+      {name: 'Caixa de som', slug: 'caixa de som'},
+      {name: 'Controle para PC', slug: 'Controle'}
+
     ]
   },
 ];

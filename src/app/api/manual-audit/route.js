@@ -7,19 +7,18 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   try {
-    // 1. Configura Supabase com Chave Mestra (Service Role) se tiver, para ignorar RLS
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
-    const { id } = body; // Só precisamos do ID agora
+    const { id } = body; 
 
     console.log(`🚀 Audit iniciado para ID: ${id}`);
 
     if (!id) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
-    // 2. BUSCA O LINK ATUAL NO BANCO (Não confia no frontend)
+    // 2. BUSCA O LINK ATUAL NO BANCO
     const { data: produto, error: dbError } = await supabase
         .from('products')
         .select('original_link, price')
@@ -36,8 +35,7 @@ export async function POST(req) {
 
     // 3. Validação do Link
     if (!original_link || original_link.length < 10 || !original_link.includes("mercadolivre")) {
-        console.log(`⏭️ ID ${id} Pulado: 'original_link' no banco está vazio ou inválido.`);
-        console.log(`   (Valor lido: ${original_link})`);
+        console.log(`⏭️ ID ${id} Pulado: 'original_link' inválido.`);
         return NextResponse.json({ status: 'skipped', reason: 'Link Original inválido no Banco' });
     }
 
@@ -45,6 +43,8 @@ export async function POST(req) {
 
     // 4. Download do HTML
     let html;
+    let statusCode; // Vamos guardar o status code
+
     try {
         const response = await axios.get(original_link, {
             headers: { 
@@ -53,26 +53,47 @@ export async function POST(req) {
                 "Cache-Control": "no-cache"
             },
             timeout: 15000,
-            validateStatus: status => status < 500 
+            validateStatus: status => status < 500 // Aceita 404 sem cair no catch
         });
         html = response.data;
+        statusCode = response.status;
     } catch (err) {
         console.error(`❌ Erro Conexão: ${err.message}`);
         return NextResponse.json({ status: 'error', reason: 'Falha ao baixar página' });
     }
 
-    const $ = cheerio.load(html);
-    const titulo = $('h1').text().trim();
-    
-    // Verifica se pausou
-    if ($('.ui-pdp-promotions-pill-label--paused, .ui-pdp-message--paused').length > 0) {
-        console.log(`💀 Anúncio Pausado. Deletando...`);
+    // 🚨 REGRA 1: Se o servidor respondeu 404 (Página não encontrada), DELETA.
+    if (statusCode === 404) {
+        console.log(`💀 Status 404 detectado. Produto não existe mais. Deletando...`);
         await supabase.from('products').delete().eq('id', id);
-        return NextResponse.json({ status: 'deleted', reason: 'Pausado' });
+        return NextResponse.json({ status: 'deleted', reason: 'Erro 404 - Página não existe' });
     }
 
+    const $ = cheerio.load(html);
+    const titulo = $('h1').text().trim();
+    const bodyText = $('body').text(); // Pega todo o texto da página
+
+    // 🚨 REGRA 2: Procura por FRASES DE MORTE do anúncio (muito mais seguro que classe CSS)
+    const frasesDeMorte = [
+        "Anúncio pausado",
+        "Este anúncio não existe mais",
+        "Finalizamos este anúncio",
+        "O vendedor finalizou este anúncio",
+        "Página não encontrada" // Caso o ML retorne 200 mas mostre página de erro
+    ];
+
+    const isDeadText = frasesDeMorte.some(frase => bodyText.includes(frase));
+    const isDeadClass = $('.ui-pdp-promotions-pill-label--paused, .ui-pdp-message--paused, .ui-pdp-container__row--start-stopped').length > 0;
+
+    if (isDeadText || isDeadClass) {
+        console.log(`💀 Anúncio FINALIZADO/PAUSADO detectado. Deletando...`);
+        await supabase.from('products').delete().eq('id', id);
+        return NextResponse.json({ status: 'deleted', reason: 'Pausado/Finalizado' });
+    }
+
+    // Só pula se não tiver título E não tiver detectado morte (pode ser captcha ou erro de load)
     if (!titulo) {
-        console.log(`⚠️ Título não carregou (Bloqueio?).`);
+        console.log(`⚠️ Título não carregou, mas não parece morto. (Captcha?). Pulando.`);
         return NextResponse.json({ status: 'skipped', reason: 'Bloqueio/Captcha' });
     }
 
@@ -112,11 +133,9 @@ export async function POST(req) {
     if (precoReal > 0) {
         const diff = Math.abs(precoReal - currentPrice);
         
-        // Se mudou mais que 1 real OU se o preço atual no banco é 0 (novo produto)
         if (diff > 1 || currentPrice === 0) {
             console.log(`🔄 ATUALIZANDO: R$ ${currentPrice} -> R$ ${precoReal}`);
             
-            // Se subiu muito (40%), pending. Senão, active.
             const status = (precoReal > currentPrice * 1.4 && currentPrice > 0) ? 'pending' : 'active';
 
             const updates = { 

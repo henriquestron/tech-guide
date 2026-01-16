@@ -56,7 +56,7 @@ export default async function SearchPage(props: SearchPageProps) {
     return (
       product.title.toLowerCase().includes(term) ||
       product.category.toLowerCase().includes(term) ||
-      product.shortDescription?.toLowerCase().includes(term) ||
+      product.short_description?.toLowerCase().includes(term) ||
       (product.brand && product.brand.toLowerCase().includes(term))
     );
   });
