@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, AlertTriangle } from 'lucide-react';
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE SUBCATEGORIAS ---
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
@@ -51,9 +51,6 @@ function ProductRow({ product, onDelete, onApprove }: { product: any, onDelete: 
   const [link, setLink] = useState(product.link || '');
   const [isModified, setIsModified] = useState(false);
   
-  // ⚠️ NOVO: Verifica se o link original existe para mostrar o alerta
-  const hasOriginalLink = product.original_link && product.original_link.includes('mercadolivre');
-  
   const isPending = product.status === 'pending';
 
   const handleSaveOrApprove = () => {
@@ -64,7 +61,7 @@ function ProductRow({ product, onDelete, onApprove }: { product: any, onDelete: 
     <tr className={`border-b border-zinc-100 dark:border-zinc-800 transition-colors group ${isPending ? 'bg-yellow-50 dark:bg-yellow-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900/50'}`}>
       <td className="p-2 text-center align-top pt-4">
         {product.image ? (
-            <img src={product.image} className="w-12 h-12 object-contain mx-auto border border-zinc-200 rounded bg-white" alt="img"/>
+            <img src={product.image} className="w-12 h-12 object-contain mx-auto border border-zinc-200 rounded bg-white"/>
         ) : (
             <span className="text-xl">📦</span>
         )}
@@ -75,7 +72,7 @@ function ProductRow({ product, onDelete, onApprove }: { product: any, onDelete: 
             {product.title}
         </div>
         
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <div className="flex items-center gap-2 mb-2">
              <span className="text-[10px] uppercase font-bold text-zinc-400 border border-zinc-200 dark:border-zinc-700 px-1 rounded">
                 {product.brand || "Tech"}
              </span>
@@ -85,13 +82,6 @@ function ProductRow({ product, onDelete, onApprove }: { product: any, onDelete: 
              <span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1 rounded">
                 {product.category}
              </span>
-
-             {/* ⚠️ ALERTA VISUAL SE O ROBÔ NÃO TIVER O LINK ORIGINAL */}
-             {!hasOriginalLink && (
-                <span className="flex items-center gap-1 text-[10px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-bold border border-red-200" title="Link Original ausente. O robô vai pular este produto.">
-                    <AlertTriangle size={10} /> Sem Link Original
-                </span>
-             )}
         </div>
       </td>
 
@@ -102,13 +92,13 @@ function ProductRow({ product, onDelete, onApprove }: { product: any, onDelete: 
                 <input 
                     value={link}
                     onChange={(e) => { setLink(e.target.value); setIsModified(true); }}
-                    placeholder="Cole seu link de afiliado aqui..." 
+                    placeholder="Cole seu link aqui..." 
                     className="flex-1 text-xs text-zinc-800 dark:text-zinc-200 bg-transparent outline-none"
                 />
             </div>
             
             <div className="flex gap-2">
-                <a href={product.link} target="_blank" rel="noopener noreferrer" className="p-1.5 text-zinc-400 hover:text-blue-500 bg-zinc-100 dark:bg-zinc-800 rounded"><ExternalLink size={14}/></a>
+                <a href={product.link} target="_blank" className="p-1.5 text-zinc-400 hover:text-blue-500 bg-zinc-100 dark:bg-zinc-800 rounded"><ExternalLink size={14}/></a>
                 
                 {isPending ? (
                     <button 
@@ -150,6 +140,7 @@ export default function AdminPanel() {
   const [subcategoria, setSubcategoria] = useState('');
   const [limit, setLimit] = useState(3); 
   
+  // --- NOVO: Limite de Auditoria Manual ---
   const [auditLimit, setAuditLimit] = useState(5); 
 
   const [loading, setLoading] = useState(false);
@@ -179,7 +170,6 @@ export default function AdminPanel() {
   }
 
   async function handleApproveOrSave(id: any, newLink: string) {
-    // Atualiza apenas o LINK DE AFILIADO. O original_link continua intacto no banco.
     const { error } = await supabase.from('products').update({ link: newLink, status: 'approved' }).eq('id', id);
     if (!error) {
         if (activeTab === 'pending') { setProdutos(produtos.filter(p => p.id !== id)); } 
@@ -244,27 +234,28 @@ export default function AdminPanel() {
     fetchProdutos();
   }
 
-  // --- AUDITOR MANUAL (AJUSTADO PARA A NOVA API) ---
+  // --- FUNÇÃO AUDITOR MANUAL COM LIMITE ---
   async function auditarPrecos() {
+    // 1. Aplica o limite
     const produtosParaAuditar = produtos.slice(0, auditLimit);
 
     if (!confirm(`Confirmar auditoria nos ${produtosParaAuditar.length} primeiros produtos da lista?`)) return;
     
     setLoading(true); setStatusLog([]);
-    addLog(`🩺 Auditoria em ${produtosParaAuditar.length} produtos...`);
+    addLog(`🩺 Iniciando Auditoria de Saúde em ${produtosParaAuditar.length} produtos...`);
     
     let deletados = 0;
     let atualizados = 0;
     
+    // Loop apenas no lote limitado
     for (const p of produtosParaAuditar) {
-        addLog(`🔍 Checando ID ${p.id}...`);
+        addLog(`🔍 Checando: ${p.title.substring(0, 20)}...`);
         
         try {
-            // ⚠️ MUDANÇA: Enviamos apenas o ID. O Backend busca o original_link seguro no banco.
             const res = await fetch('/api/manual-audit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: p.id }) 
+                body: JSON.stringify({ id: p.id, link: p.link, price: p.price })
             });
             const data = await res.json();
             
@@ -275,12 +266,10 @@ export default function AdminPanel() {
                 addLog(`💰 PREÇO MUDOU: R$${data.old} -> R$${data.new}`);
                 atualizados++;
             } else if (data.status === 'changed_pending') {
-                addLog(`⚠️ SUBIU MUITO: Pendente`);
+                addLog(`⚠️ VALOR SUBIU MUITO: Movido para Pendente`);
                 atualizados++;
-            } else if (data.status === 'skipped') {
-                addLog(`⏭️ PULADO: ${data.reason}`);
             } else if (data.status === 'error') {
-                addLog(`⚠️ Erro: ${data.reason}`);
+                addLog(`⚠️ Erro ao acessar: ${data.reason}`);
             } else {
                 addLog(`✅ OK`);
             }
@@ -330,7 +319,6 @@ export default function AdminPanel() {
       </header>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* COLUNA ESQUERDA: ROBÔ CADASTRO */}
         <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 h-fit">
           <h2 className="font-bold text-lg mb-6 text-zinc-800 dark:text-white flex items-center gap-2"><Search size={20} className="text-blue-600"/> Configurar Busca</h2>
           <label className="block text-sm font-bold mb-2 text-zinc-600 dark:text-zinc-400">O que cadastrar?</label>
@@ -365,7 +353,6 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* COLUNA DIREITA: LISTA DE PRODUTOS */}
         <div className="lg:col-span-2 bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-[800px]">
           <div className="flex flex-col sm:flex-row justify-between mb-6 items-center gap-4">
             <div>
@@ -373,10 +360,13 @@ export default function AdminPanel() {
             </div>
             
             <div className="flex gap-2 w-full sm:w-auto">
+                {/* --- BOTÃO DE AUDITORIA COM LIMITE --- */}
                 {activeTab === 'approved' && (
                     <div className="flex items-center gap-1 border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 p-1 rounded-lg">
                         <input 
-                            type="number" min="1" max="100" value={auditLimit} 
+                            type="number" 
+                            min="1" max="100" 
+                            value={auditLimit} 
                             onChange={(e) => setAuditLimit(Number(e.target.value))}
                             className="w-12 text-center text-xs p-1.5 rounded bg-white dark:bg-zinc-800 outline-none text-zinc-700 dark:text-zinc-200"
                             title="Quantos produtos verificar?"

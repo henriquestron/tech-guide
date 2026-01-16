@@ -1,195 +1,255 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import puppeteer from "puppeteer";
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; 
 
-// --- 🔄 1. GESTÃO DE TOKENS (Para manter sua conta conectada no banco) ---
-async function getCredentials(supabase) {
-    const { data, error } = await supabase.from('ml_tokens').select('app_id, app_secret').limit(1).single();
-    if (error || !data) throw new Error("Credenciais (App ID/Secret) não encontradas no Supabase.");
-    return { appId: data.app_id, appSecret: data.app_secret };
-}
-
-async function refreshToken(supabase, refreshTokenStr, creds) {
-    console.log("🔄 Renovando Token expirado...");
-    const params = new URLSearchParams();
-    params.append('grant_type', 'refresh_token');
-    params.append('client_id', creds.appId);
-    params.append('client_secret', creds.appSecret);
-    params.append('refresh_token', refreshTokenStr);
-
-    const res = await fetch('https://api.mercadolibre.com/oauth/token', { 
-        method: 'POST', body: params, 
-        headers: { 'accept': 'application/json', 'content-type': 'application/x-www-form-urlencoded' } 
-    });
-    
-    const data = await res.json();
-    if (data.error) throw new Error(`Erro Refresh ML: ${data.message || data.error}`);
-
-    // Salva o novo token no banco
-    await supabase.from('ml_tokens').update({ 
-        access_token: data.access_token, 
-        refresh_token: data.refresh_token, 
-        updated_at: new Date()
-    }).gt('id', 0);
-
-    return data.access_token;
-}
-
-async function ensureTokenIsActive(supabase) {
-  // Essa função serve apenas para garantir que o token no banco não morra.
-  // Se estiver vencido, ela renova.
-  try {
-      const { data } = await supabase.from('ml_tokens').select('*').limit(1).single();
-      if (!data || !data.access_token) return;
-
-      const creds = await getCredentials(supabase);
-
-      // Testa validade
-      const res = await fetch(`https://api.mercadolibre.com/users/me`, {
-          headers: { Authorization: `Bearer ${data.access_token}` }
-      });
-
-      if (res.status !== 200) {
-          await refreshToken(supabase, data.refresh_token, creds);
-          console.log("✅ Token renovado no banco com sucesso.");
-      } else {
-          console.log("✅ Token do banco ainda é válido.");
-      }
-  } catch (e) {
-      console.log("⚠️ Aviso: Não foi possível verificar token (sem impacto na busca pública).", e.message);
-  }
-}
-
-// --- 🤖 2. ROBÔ PRINCIPAL ---
 export async function POST(req) { 
-  try {
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  let browser = null;
 
+  try {
+    // 1. Verificações
+    if (!process.env.GEMINI_API_KEY) return NextResponse.json({ error: "Gemini Key missing" }, { status: 500 });
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return NextResponse.json({ error: "Supabase URL missing" }, { status: 500 });
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    );
+    
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" }); 
+
+    // 2. Leitura do Body
     let body = {};
     try { body = await req.json(); } catch (e) {}
-    
-    // Lista Automática (CronJob)
+
+    // 📜 LISTA AUTOMÁTICA (Para rodar no CronJob)
     const listaAutomatica = [
       { termo: "iphone 13 128gb", categoria: "celulares", subcategoria: "iphone" },
-      { termo: "ps5 slim", categoria: "games", subcategoria: "console" },
-      { termo: "notebook gamer rtx", categoria: "notebooks", subcategoria: "gamer" },
-      { termo: "monitor 144hz", categoria: "acessorios", subcategoria: "monitor" }
+      { termo: "iphone 15 pro max", categoria: "celulares", subcategoria: "iphone" },
+      { termo: "samsung galaxy s24 ultra", categoria: "celulares", subcategoria: "android" },
+      { termo: "xiaomi poco x6 pro", categoria: "celulares", subcategoria: "android" },
+      { termo: "motorola edge 50", categoria: "celulares", subcategoria: "android" },
+      
+      { termo: "notebook gamer rtx 4050", categoria: "notebooks", subcategoria: "gamer" },
+      { termo: "macbook air m1", categoria: "notebooks", subcategoria: "macbook" },
+      { termo: "notebook dell i5 ssd", categoria: "notebooks", subcategoria: "trabalho" },
+      
+      { termo: "pc gamer i5 rtx", categoria: "computadores", subcategoria: "pc-gamer" },
+      { termo: "computador all in one", categoria: "computadores", subcategoria: "all-in-one" },
+      
+      { termo: "placa de video rtx 4060", categoria: "pecas", subcategoria: "placa-video" },
+      { termo: "processador ryzen 5 5600", categoria: "pecas", subcategoria: "processador" },
+      { termo: "ssd nvme 1tb", categoria: "pecas", subcategoria: "ssd-hd" },
+      
+      { termo: "ps5 slim digital", categoria: "games", subcategoria: "console" },
+      { termo: "nintendo switch oled", categoria: "games", subcategoria: "console" },
+      
+      { termo: "monitor gamer 144hz ips", categoria: "acessorios", subcategoria: "monitor" },
+      { termo: "headset gamer sem fio", categoria: "acessorios", subcategoria: "headset" }
     ];
 
+    // Variáveis
     let { termo, categoria, subcategoria, limit = 3 } = body;
 
-    // Lógica de seleção de termo
+    // Lógica do CronJob
     if (!termo) {
         const sorteado = listaAutomatica[Math.floor(Math.random() * listaAutomatica.length)];
-        termo = sorteado.termo; categoria = sorteado.categoria; subcategoria = sorteado.subcategoria;
-        console.log(`⏰ CronJob: Buscando "${termo}"`);
+        termo = sorteado.termo;
+        categoria = sorteado.categoria;
+        subcategoria = sorteado.subcategoria;
+        limit = 3; 
+        console.log(`⏰ CronJob: Sorteado "${termo}"`);
     } else {
         console.log(`🔎 Busca Manual: "${termo}"`);
     }
 
     if (!categoria) categoria = 'notebooks';
 
-    // 3. OTIMIZAÇÃO DE BUSCA (IA)
+    // 3. IA: OTIMIZAÇÃO DE BUSCA
     let termoDeBusca = termo;
     try {
         const promptSearch = `
-        Especialista SEO ML. Usuário busca: "${termo}".
-        Refine o termo para achar o produto exato e evitar acessórios.
-        Mantenha marca/modelo. Ex: "iphone 13" -> "iphone 13 128gb original vitrine".
-        Responda APENAS o termo novo.
+        Você é um especialista em SEO para Mercado Livre.
+        SUA MISSÃO: Refinar o termo de busca do usuário para encontrar o PRODUTO PRINCIPAL com mais precisão, evitando acessórios ou peças (a menos que o usuário peça).
+
+        REGRAS OBRIGATÓRIAS:
+        1. MANTENHA a Marca e o Modelo exatos (Ex: Se o usuário digitou "iPhone 13", NÃO mude para "iPhone 14").
+        2. MANTENHA o Tipo de dispositivo (Ex: Se é "Notebook", NÃO mude para "PC Gamer").
+        3. ADICIONE especificações técnicas comuns se faltarem (Ex: "128gb", "ssd", "novo", "original").
+        4. EVITE termos ambíguos que tragam "capinhas" ou "películas" se o usuário busca o celular.
+
+        EXEMPLOS DE OTIMIZAÇÃO:
+        Input: "iphone 13" -> Output: iphone 13 128gb original vitrine
+        Input: "notebook dell i5" -> Output: notebook dell core i5 ssd 8gb
+        Input: "ps5" -> Output: playstation 5 console original
+        Input: "placa de video 3060" -> Output: placa video rtx 3060 12gb
+        Input: "mouse logitech" -> Output: mouse gamer logitech g series
+
+        O usuário digitou: "${termo}"
+        Responda APENAS o termo novo, sem aspas, sem explicações.
         `;
+        
         const resultSearch = await model.generateContent(promptSearch);
         const sugestao = resultSearch.response.text().trim();
-        // Segurança: só aceita se mantiver a palavra chave original
-        if (sugestao.toLowerCase().includes(termo.split(' ')[0].toLowerCase())) {
+        
+        // Verificação de segurança simples:
+        // Se a IA alucinar e mudar a marca principal (ex: trocar Apple por Samsung), ignoramos.
+        const termoOriginalBasico = termo.split(' ')[0].toLowerCase();
+        if (sugestao.toLowerCase().includes(termoOriginalBasico)) {
             termoDeBusca = sugestao;
-            console.log(`🧠 IA refinou: "${termo}" -> "${termoDeBusca}"`);
+            console.log(`🧠 IA refinou "${termo}" para -> "${termoDeBusca}"`);
+        } else {
+            console.log(`⚠️ IA tentou mudar o produto ("${sugestao}"). Mantendo original.`);
         }
-    } catch (e) { console.log("Erro IA busca, usando original."); }
 
-    // 4. MANUTENÇÃO DO TOKEN (Background)
-    await ensureTokenIsActive(supabase);
-
-    // 5. BUSCA NA API (PÚBLICA - Correção do Erro 403)
-    console.log("🔍 Buscando na API Pública do ML...");
-    const searchUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(termoDeBusca)}&limit=${limit}&condition=new&sort=price_asc`;
-    
-    const res = await fetch(searchUrl, { 
-        headers: { 
-            // Disfarça como navegador para não tomar 403
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Accept": "application/json"
-        } 
-    });
-
-    if (!res.ok) {
-        const erroMsg = await res.text();
-        console.error("❌ Erro Detalhado ML:", erroMsg);
-        throw new Error(`Erro API ML: ${res.status} ${res.statusText}`);
+    } catch (e) {
+        console.log("Falha na tradução da busca, usando termo original.");
     }
 
-    const data = await res.json();
-    const resultados = data.results || [];
-    console.log(`🎯 Encontrados: ${resultados.length} produtos.`);
+    // 4. Puppeteer (Simula Navegador)
+    // Nota: Se rodar na Vercel Free, o Puppeteer pode ser pesado. No Render funciona melhor.
+    browser = await puppeteer.launch({
+      headless: "new", 
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+    });
 
-    // 6. PROCESSAMENTO E SALVAMENTO
+    const page = await browser.newPage();
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+    const url = `https://lista.mercadolivre.com.br/${termoDeBusca.replace(/ /g, "-")}_NoIndex_True`;
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
+    
+    try { await page.waitForSelector('.ui-search-layout__item, .poly-card, .ui-search-result__wrapper', { timeout: 6000 }); } catch(e) {}
+    
+    await page.evaluate(() => window.scrollBy(0, 500));
+    await new Promise(r => setTimeout(r, 1500));
+
+    // 5. Scraping
+    const listaProdutos = await page.evaluate((limiteMax) => { 
+      const seletores = ['li.ui-search-layout__item', 'div.ui-search-result__wrapper', 'div.poly-card', 'div.andes-card'];
+      let elements = [];
+      for (const sel of seletores) {
+        const achados = document.querySelectorAll(sel);
+        if (achados.length > 0) { elements = Array.from(achados); break; }
+      }
+
+      const itensValidos = [];
+      const linksVistos = new Set();
+      const titulosVistos = new Set();
+      
+      for (const item of elements) {
+        if (itensValidos.length >= limiteMax) break;
+        
+        const linkEl = item.querySelector('a');
+        if (!linkEl) continue;
+        
+        // Limpa Link
+        let linkOriginal = linkEl.href;
+        if (linkOriginal.includes('click1') || linkOriginal.includes('mclics')) continue;
+        let linkLimpo = linkOriginal.split('?')[0]; // Remove rastreio, deixa link puro
+
+        if (linksVistos.has(linkLimpo)) continue;
+        linksVistos.add(linkLimpo);
+
+        // Preço
+        let currentPrice = 0;
+        let originalPrice = 0;
+        
+        const previousContainer = item.querySelector('.andes-money-amount--previous');
+        if (previousContainer) {
+            const prevVal = previousContainer.querySelector('.andes-money-amount__fraction');
+            if (prevVal) originalPrice = parseFloat(prevVal.innerText.replace(/\./g, '').replace(',', '.'));
+        }
+        
+        const allPrices = Array.from(item.querySelectorAll('.andes-money-amount__fraction'));
+        const currentPriceEl = allPrices.find(el => !el.closest('.andes-money-amount--previous'));
+        if (currentPriceEl) currentPrice = parseFloat(currentPriceEl.innerText.replace(/\./g, '').replace(',', '.'));
+
+        const titleEl = item.querySelector('.ui-search-item__title') || item.querySelector('.poly-component__title') || item.querySelector('h2');
+        const imgEl = item.querySelector('img');
+        let titulo = titleEl ? titleEl.innerText.trim() : "";
+        
+        // Anti-Duplicação de Título
+        let tituloKey = titulo.toLowerCase().substring(0, 20);
+        if (titulosVistos.has(tituloKey)) continue;
+        titulosVistos.add(tituloKey);
+
+        let imagem = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('src') || "") : "";
+
+        if (titulo && currentPrice > 0) {
+            itensValidos.push({ titulo, price: currentPrice, originalPrice, image: imagem, link: linkLimpo });
+        }
+      }
+      return itensValidos;
+    }, limit);
+
+    console.log(`🎯 Encontrados: ${listaProdutos.length} produtos únicos`);
+    await browser.close();
+
+    // 6. IA: REVIEW + SALVAMENTO (Aqui está a alteração!)
     let salvos = 0;
-    for (const item of resultados) {
-      const titulo = item.title;
-      const price = item.price;
-      const permalink = item.permalink; // Link limpo
+    for (const produto of listaProdutos) {
       
-      // Melhora qualidade da imagem (Thumbnail -> HD)
-      const image = item.thumbnail ? item.thumbnail.replace('-I.jpg', '-V.jpg').replace('-I.webp', '-V.webp') : "";
-      
-      const brandAPI = item.attributes?.find(a => a.id === 'BRAND')?.value_name || "Genérico";
-      const originalPrice = item.original_price || (price * 1.25); 
+      let dadosReview = {
+         brand: "Genérico",
+         shortDescription: `Oferta: ${produto.titulo}`,
+         rating: 4.5,
+         fullReview: { verdict: "Análise pendente", pros: ["Bom Custo"], cons: [], content: "..." }
+      };
 
-      // IA Review
-      let dadosReview = { brand: brandAPI, shortDescription: `Oferta: ${titulo}`, rating: 4.5, fullReview: {} };
       try {
-        const prompt = `Analise Tech: "${titulo}" - R$ ${price}. Categoria: ${categoria}. JSON RÍGIDO: { "shortDescription": "frase mkt curta", "rating": 4.5, "fullReview": { "verdict": "Vale a pena?", "pros": ["a","b"], "cons": ["c"], "content": "resumo tecnico" } }`;
+        const prompt = `
+          Especialista Tech. Produto: "${produto.titulo}", Preço: R$ ${produto.price}.
+          Categoria: "${categoria}", Subcategoria: "${subcategoria || 'Geral'}".
+          Analise o produto. JSON RÍGIDO: { 
+            "brand": "Marca",
+            "shortDescription": "frase curta", 
+            "rating": 4.5, 
+            "fullReview": { "verdict": "...", "pros": [], "cons": [], "content": "..." } 
+          }
+        `;
         const result = await model.generateContent(prompt);
-        const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-        const jsonIA = JSON.parse(text);
-        dadosReview = { ...dadosReview, ...jsonIA, brand: brandAPI }; // Mantém marca da API se IA falhar
-      } catch (err) {}
+        const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").replace(/\*\*/g, "").trim();
+        dadosReview = { ...dadosReview, ...JSON.parse(text) };
+      } catch (err) { console.error("Erro IA Review:", err.message); }
 
-      // Verifica duplicidade pelo Link Original
-      const { data: existente } = await supabase.from('products').select('id').eq('original_link', permalink).single();
-      
+      const precoDe = (produto.originalPrice > produto.price) ? produto.originalPrice : (produto.price * 1.25); 
+
+      // Verifica se já existe pelo link original
+      const { data: existente } = await supabase.from('products').select('id').eq('original_link', produto.link).single();
+
       if (!existente) {
           const { error } = await supabase.from('products').insert([{
-            title: titulo,
-            image: image,
-            price: price,
-            original_price: originalPrice,
+            title: produto.titulo,
+            image: produto.image,
+            price: produto.price,
+            original_price: precoDe,
             
-            // 👇 ESSENCIAL PARA O SISTEMA DE AUDITORIA
-            link: permalink,           // Link temporário (vai virar afiliado)
-            original_link: permalink,  // Link original (robô usa pra checar preço)
+            // 👇 AQUI A MÁGICA: SALVA NAS DUAS COLUNAS 👇
+            link: produto.link,           // Este você muda depois para afiliado
+            original_link: produto.link,  // Este fica intacto para o robô checar preço
             
             category: categoria,
             subcategory: subcategoria || null,
-            brand: dadosReview.brand,
+            brand: dadosReview.brand, 
             rating: Number(dadosReview.rating),
             short_description: dadosReview.shortDescription,
             full_review: dadosReview.fullReview,
-            status: 'pending' // Entra como pendente para você aprovar
+            status: 'pending'
           }]);
 
           if (!error) salvos++;
       }
     }
 
-    return NextResponse.json({ success: true, message: `${salvos} produtos novos salvos via API!` });
+    return NextResponse.json({ success: true, message: `${salvos} processados. (Busca usada: ${termoDeBusca})` });
 
   } catch (error) {
+    if (browser) await browser.close();
     console.error("🚨 Erro Fatal:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
