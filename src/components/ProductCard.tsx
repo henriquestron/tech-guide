@@ -1,7 +1,8 @@
 "use client";
 
-import { Star, Eye, Heart, ShoppingBag } from "lucide-react";
+import { Star, Eye, Heart, ShoppingBag, Share2 } from "lucide-react"; // Importei o Share2
 import { useFavorites } from "@/context/FavoritesContext";
+import Link from "next/link"; // Para linkar internamente se precisar
 
 interface ProductCardProps {
   product: any;
@@ -36,32 +37,67 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
   // --- CONFIGURAÇÃO DO BOTÃO (SÓ MERCADO LIVRE) ---
   const isAvailable = link !== "#";
 
-  // Estilo Fixo do Mercado Livre (Amarelo Ouro + Azul Escuro)
   const btnStyle = isAvailable 
     ? "bg-[#FFE600] hover:bg-[#F2DB00] text-[#2D3277] shadow-yellow-900/20" 
     : "bg-zinc-800 cursor-not-allowed text-zinc-600";
 
   const btnText = isAvailable ? "Mercado Livre" : "Indisponível";
 
+  // --- FUNÇÃO DE COMPARTILHAR ---
+  const handleShare = (e: React.MouseEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation();
+
+    // Gera o link interno do seu site (para a página que criamos antes)
+    const internalUrl = `${window.location.origin}/produto/${productId}`;
+
+    // Tenta usar o compartilhamento nativo do celular (WhatsApp, etc)
+    if (navigator.share) {
+        navigator.share({
+            title: product.title,
+            text: `Olha essa oferta que achei no Tech Guide: ${product.title} por R$ ${price}`,
+            url: internalUrl
+        }).catch(console.error);
+    } else {
+        // Se for no PC, copia para a área de transferência
+        navigator.clipboard.writeText(internalUrl);
+        alert("Link do produto copiado! Pode colar no WhatsApp.");
+    }
+  };
+
   return (
     <div className="group bg-zinc-900 rounded-xl border border-zinc-800 hover:border-[#FFE600]/50 transition-all duration-300 hover:shadow-xl hover:shadow-yellow-900/10 flex flex-col overflow-hidden h-full relative">
       
-      {/* Botão Favoritar */}
-      <button 
-        onClick={(e) => {
-          e.stopPropagation(); 
-          toggleFavorite(product);
-        }}
-        className="absolute top-3 right-3 z-20 p-2 rounded-full bg-black/50 backdrop-blur-md shadow-sm hover:scale-110 transition-transform group-hover:bg-black"
-      >
-        <Heart 
-          size={18} 
-          className={`transition-colors duration-300 ${favorite ? 'fill-red-500 text-red-500' : 'text-zinc-400 hover:text-red-400'}`} 
-        />
-      </button>
+      {/* --- BOTÕES FLUTUANTES (SHARE + FAVORITO) --- */}
+      <div className="absolute top-3 right-3 z-20 flex gap-2">
+          
+          {/* Botão Compartilhar (NOVO) */}
+          <button 
+            onClick={handleShare}
+            className="p-2 rounded-full bg-black/50 backdrop-blur-md shadow-sm hover:scale-110 transition-transform hover:bg-blue-600 text-zinc-300 hover:text-white"
+            title="Compartilhar oferta"
+          >
+            <Share2 size={18} />
+          </button>
+
+          {/* Botão Favoritar */}
+          <button 
+            onClick={(e) => {
+              e.stopPropagation(); 
+              toggleFavorite(product);
+            }}
+            className="p-2 rounded-full bg-black/50 backdrop-blur-md shadow-sm hover:scale-110 transition-transform hover:bg-black"
+          >
+            <Heart 
+              size={18} 
+              className={`transition-colors duration-300 ${favorite ? 'fill-red-500 text-red-500' : 'text-zinc-400 hover:text-red-400'}`} 
+            />
+          </button>
+      </div>
 
       {/* ÁREA DA IMAGEM */}
-      <div className="relative aspect-[4/3] p-4 bg-white flex items-center justify-center overflow-hidden">
+      {/* Tornamos a imagem clicável para ir para a página de detalhes interna */}
+      <Link href={`/produto/${productId}`} className="relative aspect-[4/3] p-4 bg-white flex items-center justify-center overflow-hidden cursor-pointer">
         
         {/* Etiqueta de Desconto */}
         {hasDiscount && discountPercent > 0 && (
@@ -87,7 +123,7 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
           <Star size={12} className="fill-yellow-400 text-yellow-400" />
           {rating.toFixed(1)}
         </div>
-      </div>
+      </Link>
 
       {/* CONTEÚDO DO CARD */}
       <div className="p-4 flex-1 flex flex-col">
@@ -96,10 +132,10 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
           {category}
         </span>
         
-        {/* Título */}
-        <h3 className="font-bold text-sm leading-tight mb-2 text-zinc-100 group-hover:text-[#FFE600] transition-colors line-clamp-2 min-h-[2.5rem]" title={product.title}>
+        {/* Título (Link para página interna) */}
+        <Link href={`/produto/${productId}`} className="font-bold text-sm leading-tight mb-2 text-zinc-100 group-hover:text-[#FFE600] transition-colors line-clamp-2 min-h-[2.5rem]" title={product.title}>
           {product.title}
-        </h3>
+        </Link>
         
         {/* DESCRIÇÃO */}
         <p className="text-xs text-zinc-400 line-clamp-2 mb-4 min-h-[2rem] leading-relaxed">
