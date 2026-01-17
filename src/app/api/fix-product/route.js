@@ -32,6 +32,7 @@ export async function POST(req) {
       - pecas (sub: placa-video, processador, placa-mae, memoria-ram, ssd-hd, fonte)
       - acessorios (sub: mouse, teclado, headset, monitor)
       - games (sub: console, controle, jogos)
+      - relogios (sub: smartwatch, esportivo, acessorios )
 
       TAREFA: Retorne a categoria, subcategoria e marca corretas baseadas no título.
       

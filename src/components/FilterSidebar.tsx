@@ -34,6 +34,17 @@ const subcategoryOptions: Record<string, { label: string; slug: string }[]> = {
     { label: "Trabalho", slug: "trabalho" },
     { label: "MacBook", slug: "macbook" },
   ],
+  relogios:[
+    {label: "Smartwatch", slug: "smartwatch"},
+    {label: "Esportivo", slug: "esportivo"},
+    {label: "Acessorios", slug: "acessorios"}
+  ],
+  games:[
+    {label: "Consoles", slug:"console"},
+    {label: "Controles", slug:"controle"},
+    {label: "Jogos", slug:"jogos"},
+    {label: "Acessórios Gamer", slug:"acessorios"}
+    ]
 };
 
 interface FilterProps {
