@@ -16,34 +16,25 @@ export async function POST(req) {
     const base64Image = buffer.toString("base64");
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    // Atualizado para o modelo mais estável e rápido para visão
     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-    // 👇 AQUI ESTÁ O SEGREDO: O MAPA DO SEU SITE 👇
+    // 👇 PROMPT OTIMIZADO PARA OFERTAS 👇
     const prompt = `
     Analise este print de tela de um produto de e-commerce.
     Extraia os dados técnicos e classifique conforme a estrutura do meu site.
     
+    ⚠️ REGRA DE PREÇO DE OFERTA: 
+    Se a imagem mostrar um preço "De / Por" ou um desconto, extraia sempre o PREÇO FINAL (o mais baixo) para o campo 'price'.
+
     --- ESTRUTURA DE CATEGORIAS (Use EXATAMENTE estes slugs) ---
-    1. Categoria: 'celulares'
-       Subcategorias permitidas: 'android', 'iphone'
-    
-    2. Categoria: 'notebooks'
-       Subcategorias permitidas: 'gamer', 'trabalho' (inclui MacBook), 'acessorios'
-    
-    3. Categoria: 'computadores'
-       Subcategorias permitidas: 'pc-gamer', 'home-office', 'all-in-one'
-    
-    4. Categoria: 'pecas'
-       Subcategorias permitidas: 'processador', 'placa-video', 'placa-mae', 'memoria-ram', 'ssd-hd', 'fonte'
-    
-    5. Categoria: 'relogios'
-       Subcategorias permitidas: 'smartwatch', 'esportivo', 'acessorios'
-    
-    6. Categoria: 'games'
-       Subcategorias permitidas: 'console' (PS5, Xbox, Switch), 'controle', 'jogos', 'acessorios'
-    
-    7. Categoria: 'acessorios'
-       Subcategorias permitidas: 'mouse', 'teclado', 'headset', 'monitor', 'microfone', 'caixa de som', 'Controle' (para PC)
+    1. Categoria: 'celulares' -> Sub: 'android', 'iphone'
+    2. Categoria: 'notebooks' -> Sub: 'gamer', 'trabalho', 'acessorios'
+    3. Categoria: 'computadores' -> Sub: 'pc-gamer', 'home-office', 'all-in-one'
+    4. Categoria: 'pecas' -> Sub: 'processador', 'placa-video', 'placa-mae', 'memoria-ram', 'ssd-hd', 'fonte'
+    5. Categoria: 'relogios' -> Sub: 'smartwatch', 'esportivo', 'acessorios'
+    6. Categoria: 'games' -> Sub: 'console', 'controle', 'jogos', 'acessorios'
+    7. Categoria: 'acessorios' -> Sub: 'mouse', 'teclado', 'headset', 'monitor', 'microfone', 'caixa de som', 'Controle'
 
     -----------------------------------------------------------
 
@@ -54,7 +45,7 @@ export async function POST(req) {
       "brand": "Marca (Ex: Samsung, Apple, Dell, Logitech)",
       "category": "slug_da_categoria_acima",
       "subcategory": "slug_da_subcategoria_acima",
-      "shortDescription": "Frase de marketing curta (max 10 palavras)",
+      "shortDescription": "Frase de marketing curta (max 10 palavras) destacando se for oferta",
       "rating": 4.5,
       "fullReview": {
          "verdict": "Veredito técnico direto (Vale a pena?)",
