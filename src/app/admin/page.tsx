@@ -2,7 +2,68 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, ImagePlus, RotateCcw, ToggleRight, FileText, X, List, Copy, ArrowRight } from 'lucide-react';
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, ImagePlus, RotateCcw, ToggleRight, FileText, X, List, Copy, ArrowRight, Timer } from 'lucide-react';
+
+// --- COMPONENTE NOVO: BOTÃO DE AUDITORIA LENTA (1 MINUTO) ---
+function SlowAuditButton({ productId }: { productId: any }) {
+    const [loading, setLoading] = useState(false);
+    const [statusLabel, setStatusLabel] = useState<string | null>(null);
+
+    const handleSlowAudit = async () => {
+        setLoading(true);
+        setStatusLabel("60s..."); // Feedback imediato
+
+        try {
+            const res = await fetch('/api/audit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: productId }),
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                if (data.status === 'updated') setStatusLabel(`✅ R$ ${data.new}`);
+                else if (data.status === 'ok') setStatusLabel("✅ Igual");
+                else if (data.status === 'deleted') setStatusLabel("💀 Morto");
+                else if (data.status === 'skipped') setStatusLabel("⚠️ Pulou");
+                else setStatusLabel("⚠️ Erro");
+            } else {
+                setStatusLabel("❌ Erro");
+            }
+        } catch (error) {
+            console.error(error);
+            setStatusLabel("❌ Falha");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="flex items-center gap-1 ml-1">
+            <button 
+                onClick={handleSlowAudit} 
+                disabled={loading}
+                title="Auditoria Lenta (Anti-Bloqueio - 1 min)"
+                className={`p-1 rounded-full transition-all flex items-center gap-1 border ${
+                    loading 
+                    ? "bg-zinc-100 text-zinc-400 cursor-not-allowed border-zinc-200" 
+                    : "bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100 hover:border-indigo-300"
+                }`}
+            >
+                {loading ? <Loader2 size={10} className="animate-spin"/> : <Timer size={10}/>}
+                {/* Se estiver carregando ou tiver resultado, mostra o texto, senão fica só o ícone compacto */}
+                {(loading || statusLabel) && (
+                    <span className="text-[9px] font-bold whitespace-nowrap px-1">
+                        {statusLabel || "60s"}
+                    </span>
+                )}
+            </button>
+        </div>
+    );
+}
+// ------------------------------------------------------------
+
 
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
   pecas: [ { label: 'Processadores', value: 'processador' }, { label: 'Placas de Vídeo', value: 'placa-video' }, { label: 'Placas Mãe', value: 'placa-mae' }, { label: 'Memória RAM', value: 'memoria-ram' }, { label: 'Armazenamento (SSD/HD)', value: 'ssd-hd' }, { label: 'Fontes', value: 'fonte' } ],
@@ -43,11 +104,21 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
                     <span className="text-[10px] uppercase font-bold text-zinc-400 border border-zinc-200 dark:border-zinc-700 px-1 rounded">{product.brand || "Tech"}</span>
                     <div className="flex items-center gap-1">
                         <span className="text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800 px-1.5 py-0.5 rounded text-[10px]">R$ {product.price}</span>
+                        
+                        {/* --- AQUI ESTÁ A MUDANÇA: BOTÕES DE AUDIT --- */}
                         {hasOriginalLink && (
-                            <button onClick={handleSingleAudit} disabled={isAuditing} className="p-0.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-blue-500 transition-colors">
-                                {isAuditing ? <Loader2 size={10} className="animate-spin text-blue-500"/> : <RefreshCw size={10}/>}
-                            </button>
+                            <div className="flex items-center gap-0.5">
+                                {/* Audit Rápido (Original) */}
+                                <button onClick={handleSingleAudit} disabled={isAuditing} title="Audit Rápido (API ML)" className="p-0.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-blue-500 transition-colors">
+                                    {isAuditing ? <Loader2 size={10} className="animate-spin text-blue-500"/> : <RefreshCw size={10}/>}
+                                </button>
+                                
+                                {/* 🔥 Audit Lento (Novo) */}
+                                <SlowAuditButton productId={product.id} />
+                            </div>
                         )}
+                        {/* ------------------------------------------- */}
+
                     </div>
                     <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 px-1 rounded">
                         <span className="text-[10px] text-zinc-500">{product.category}</span>
