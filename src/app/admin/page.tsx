@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, FileText, X, List, Copy, ArrowRight, Terminal, Timer } from 'lucide-react';
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, FileText, X, List, Copy, ArrowRight, Terminal, Timer, Camera } from 'lucide-react';
 
-// --- CONFIGURAÇÃO DE CATEGORIAS E SUBCATEGORIAS ---
+// --- CONFIGURAÇÃO DE CATEGORIAS ---
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
   pecas: [ { label: 'Processadores', value: 'processador' }, { label: 'Placas de Vídeo', value: 'placa-video' }, { label: 'Placas Mãe', value: 'placa-mae' }, { label: 'Memória RAM', value: 'memoria-ram' }, { label: 'Armazenamento (SSD/HD)', value: 'ssd-hd' }, { label: 'Fontes', value: 'fonte' } ],
   computadores: [ { label: 'PC Gamer Completo', value: 'pc-gamer' }, { label: 'Home Office / Estudo', value: 'home-office' }, { label: 'All in One', value: 'all-in-one' } ],
@@ -15,8 +15,8 @@ const subOptionsMap: Record<string, { label: string; value: string }[]> = {
   relogios: [ { label: 'Smartwatch', value: 'smartwatch' }, { label: 'Esportivo', value: 'esportivo' } ]
 };
 
-// --- COMPONENTE: BOTÃO DE AUDITORIA LENTA (1 MINUTO) ---
-function SlowAuditButton({ productId }: { productId: any }) {
+// --- BOTÃO DE AUDITORIA LENTA (Client Side Call) ---
+function SlowAuditButton({ product }: { product: any }) {
     const [loading, setLoading] = useState(false);
     const [statusLabel, setStatusLabel] = useState<string | null>(null);
 
@@ -24,12 +24,18 @@ function SlowAuditButton({ productId }: { productId: any }) {
         setLoading(true);
         setStatusLabel("60s..."); 
         try {
-            const res = await fetch('/api/audit', {
+            // Chama a rota manual-audit que agora tem o Puppeteer
+            const res = await fetch('/api/manual-audit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: productId }),
+                body: JSON.stringify({ 
+                    id: product.id, 
+                    link: product.original_link, 
+                    price: product.price 
+                }),
             });
             const data = await res.json();
+            
             if (res.ok) {
                 if (data.status === 'updated') setStatusLabel(`✅ R$ ${data.new}`);
                 else if (data.status === 'ok') setStatusLabel("✅ Igual");
@@ -41,19 +47,23 @@ function SlowAuditButton({ productId }: { productId: any }) {
     };
 
     return (
-        <button onClick={handleSlowAudit} disabled={loading} className="flex items-center gap-1 p-1 px-2 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-full hover:bg-indigo-100 transition-all text-[9px] font-bold h-6">
+        <button onClick={handleSlowAudit} disabled={loading} className="flex items-center gap-1 p-1 px-2 bg-indigo-900/30 text-indigo-300 border border-indigo-700 rounded-full hover:bg-indigo-800 transition-all text-[9px] font-bold h-6">
             {loading ? <Loader2 size={10} className="animate-spin"/> : <Timer size={10}/>}
             {loading || statusLabel ? <span>{statusLabel || "Lento"}</span> : <span>Lento</span>}
         </button>
     );
 }
 
-// --- COMPONENTE: CARD DE UPLOAD ---
+// --- CARD DE UPLOAD (CSS Corrigido) ---
 function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [link, setLink] = useState('');
     const [saving, setSaving] = useState(false);
+    
+    // Custom Image States
+    const [customImageFile, setCustomImageFile] = useState<File | null>(null);
+    const [customImageUrl, setCustomImageUrl] = useState('');
 
     useEffect(() => { 
         const formData = new FormData();
@@ -65,16 +75,49 @@ function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
             .finally(() => setLoading(false));
     }, [file]);
 
-    if (loading) return <div className="p-4 border rounded-xl border-zinc-700 bg-zinc-900 shadow-sm h-32 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500"/></div>;
+    async function handleSave() {
+        if(!link) return alert("Por favor, cole o link de afiliado!");
+        setSaving(true);
+        await onSave(data, link, file, customImageFile, customImageUrl); 
+        setSaving(false);
+    }
+
+    const handleCustomFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setCustomImageFile(e.target.files[0]);
+            setCustomImageUrl(''); 
+        }
+    };
+
+    let previewSrc = URL.createObjectURL(file);
+    if (customImageFile) previewSrc = URL.createObjectURL(customImageFile);
+    else if (customImageUrl) previewSrc = customImageUrl;
+
+    if (loading) return <div className="p-4 border border-zinc-800 bg-zinc-900 rounded-xl h-32 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500"/></div>;
 
     return (
-        <div className={`relative p-3 rounded-xl border flex gap-3 transition-all shadow-sm group ${isFlashDeal ? 'bg-orange-950/20 border-orange-800' : 'bg-zinc-900 border-zinc-700'}`}>
-             <button onClick={() => onRemove(file.name)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10 hover:bg-red-600"><Trash size={12}/></button>
+        <div className={`relative p-3 rounded-xl border flex gap-3 transition-all shadow-sm group ${isFlashDeal ? 'bg-orange-950/10 border-orange-800' : 'bg-zinc-900 border-zinc-700'}`}>
+             <button onClick={() => onRemove(file.name)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10 hover:bg-red-700"><Trash size={12}/></button>
              
-             <div className="flex-shrink-0 w-24 h-24 bg-white rounded-lg border border-zinc-700 overflow-hidden">
-                 <img src={URL.createObjectURL(file)} className="w-full h-full object-contain"/>
+             {/* Imagem */}
+             <div className="flex flex-col gap-2 w-24 flex-shrink-0">
+                 <div className="w-24 h-24 bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden relative group/img">
+                     <img src={previewSrc} className="w-full h-full object-contain"/>
+                     <label className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white opacity-0 group-hover/img:opacity-100 cursor-pointer transition-opacity">
+                        <Camera size={20}/>
+                        <span className="text-[8px] font-bold mt-1">TROCAR</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={handleCustomFileChange} />
+                     </label>
+                 </div>
+                 <input 
+                    value={customImageUrl} 
+                    onChange={e => { setCustomImageUrl(e.target.value); setCustomImageFile(null); }} 
+                    placeholder="Link Img..." 
+                    className="text-[9px] bg-zinc-950 border border-zinc-700 rounded p-1 outline-none text-zinc-300 focus:border-blue-500 placeholder:text-zinc-600"
+                 />
              </div>
 
+             {/* Dados */}
              <div className="flex-1 flex flex-col gap-2 min-w-0">
                  <input 
                     value={data?.title || ''} 
@@ -82,13 +125,24 @@ function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
                     className="font-bold text-xs bg-transparent border-b border-zinc-700 w-full outline-none focus:border-blue-500 text-zinc-100 truncate" 
                     placeholder="Nome do produto..."
                  />
+                 
                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold bg-green-900/30 text-green-400 border border-green-800 px-2 py-0.5 rounded">R$ {data?.price}</span>
+                    <span className="text-[10px] font-bold bg-green-900/30 text-green-400 border border-green-900 px-2 py-0.5 rounded">R$ {data?.price}</span>
                     <span className="text-[10px] uppercase text-zinc-400 font-bold border border-zinc-700 px-1 rounded">{data?.brand || "GENERICO"}</span>
                  </div>
+
                  <div className="flex gap-2 items-center mt-auto">
-                    <input value={link} onChange={e => setLink(e.target.value)} placeholder="Cole o Link..." className="flex-1 text-[10px] bg-zinc-950 border border-zinc-700 rounded p-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-zinc-200"/>
-                    <button onClick={() => { setSaving(true); onSave(data, link, file).finally(()=>setSaving(false)); }} disabled={saving || !link} className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 disabled:opacity-50">
+                    <input 
+                        value={link} 
+                        onChange={e => setLink(e.target.value)} 
+                        placeholder="Link Afiliado (Obrigatório)..." 
+                        className="flex-1 text-[10px] bg-zinc-950 border border-zinc-700 rounded p-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-zinc-200 placeholder:text-zinc-600"
+                    />
+                    <button 
+                        onClick={handleSave} 
+                        disabled={saving || !link} 
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-all disabled:opacity-50"
+                    >
                         {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Salvar
                     </button>
                  </div>
@@ -97,7 +151,7 @@ function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
     );
 }
 
-// --- LINHA DA TABELA (COM TODOS OS BOTÕES) ---
+// --- LINHA DO PRODUTO (Com Auditoria Individual e IA Fix) ---
 function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory }: any) {
   const [link, setLink] = useState(product.link || '');
   const [isModified, setIsModified] = useState(false);
@@ -116,13 +170,13 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
       
       <td className="p-3 align-top">
         <div className="flex items-center gap-2">
-            <div className="font-bold text-zinc-100 text-xs mb-1 line-clamp-2" title={product.title}>{product.title}</div>
+            <div className="font-bold text-zinc-200 text-xs mb-1 line-clamp-2" title={product.title}>{product.title}</div>
             {isFlash && <span className="bg-orange-900/30 text-orange-400 border border-orange-800 text-[10px] px-1 rounded font-bold flex items-center gap-1"><Zap size={10} fill="currentColor"/> 24h</span>}
         </div>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
              <span className="text-[10px] uppercase font-bold text-zinc-400 border border-zinc-700 px-1 rounded">{product.brand || "Tech"}</span>
              
-             {/* Preço + Botões de Audit */}
+             {/* Preço + Audit */}
              <div className="flex items-center gap-1">
                  <span className="text-green-400 font-bold bg-green-900/20 border border-green-900 px-1.5 py-0.5 rounded text-[10px]">R$ {product.price}</span>
                  {hasOriginalLink && (
@@ -134,12 +188,12 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
                         >
                             {auditing ? <Loader2 size={10} className="animate-spin text-blue-500"/> : <RefreshCw size={10}/>}
                         </button>
-                        <SlowAuditButton productId={product.id} />
+                        <SlowAuditButton product={product} />
                      </div>
                  )}
              </div>
 
-             {/* Categoria + Botão Fix */}
+             {/* Categoria + IA Fix */}
              <div className="flex items-center gap-1">
                 <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1 rounded">{product.category}</span>
                 <button 
@@ -161,7 +215,7 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
                     value={link} 
                     onChange={(e) => { setLink(e.target.value); setIsModified(true); }} 
                     placeholder="Link Afiliado..." 
-                    className="flex-1 text-xs bg-transparent outline-none text-zinc-200"
+                    className="flex-1 text-xs bg-transparent outline-none text-zinc-200 placeholder:text-zinc-600"
                 />
             </div>
             <div className="flex gap-2">
@@ -180,7 +234,7 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
   );
 }
 
-// --- PAINEL PRINCIPAL ---
+// --- PÁGINA PRINCIPAL ---
 export default function AdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState('');
@@ -189,8 +243,9 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'upload' | 'flash'>('pending');
   const [termoBusca, setTermoBusca] = useState('');
   const [categoria, setCategoria] = useState('notebooks');
-  const [subcategoria, setSubcategoria] = useState(''); // Estado para subcategoria restaurado
+  const [subcategoria, setSubcategoria] = useState('');
   
+  // Limites
   const [limit, setLimit] = useState(3); 
   const [auditLimit, setAuditLimit] = useState(5); 
 
@@ -199,13 +254,13 @@ export default function AdminPanel() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   
-  // Importação
+  // Importação Modal
   const [showImportModal, setShowImportModal] = useState(false);
   const [importMode, setImportMode] = useState<'txt' | 'list'>('list');
   const [importText, setImportText] = useState('');
   const [affiliateLinks, setAffiliateLinks] = useState('');
 
-  const currentSubOptions = subOptionsMap[categoria] || []; // Lógica da subcategoria
+  const currentSubOptions = subOptionsMap[categoria] || [];
 
   useEffect(() => { 
       if(isLoggedIn && activeTab !== 'upload') fetchProdutos(); 
@@ -243,7 +298,7 @@ export default function AdminPanel() {
 
   function addLog(msg: string) { setStatusLog(prev => [...prev, msg]); }
 
-  // --- ROBÔ (API PUPPETEER) ---
+  // --- ROBÔ DE BUSCA ---
   async function rodarRobo() {
     if (!termoBusca) return alert("Digite o termo!");
     setLoading(true); setStatusLog([]); 
@@ -257,13 +312,11 @@ export default function AdminPanel() {
             const res = await fetch('/api/run-bot', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ termo: t, categoria, subcategoria, limit }) // Envia subcategoria e limit
+                body: JSON.stringify({ termo: t, categoria, subcategoria, limit }) 
             });
             const data = await res.json();
-            
             if(data.success) addLog(`✅ Concluído: ${data.message}`);
             else addLog(`❌ Erro: ${data.error || "Falha desconhecida"}`);
-            
         } catch(e:any) { addLog(`❌ Erro Fatal: ${e.message}`); }
         await new Promise(r => setTimeout(r, 1000));
     }
@@ -277,10 +330,8 @@ export default function AdminPanel() {
   async function auditarPrecos() {
     const alvo = produtos.slice(0, auditLimit);
     if (!confirm(`Auditar os primeiros ${alvo.length} produtos?`)) return;
-    
     setLoading(true); setStatusLog([]);
     addLog(`🩺 Auditando ${alvo.length} itens...`);
-    
     let changed = 0;
     for (const p of alvo) {
         addLog(`🔍 ${p.title.substring(0,20)}...`);
@@ -291,12 +342,10 @@ export default function AdminPanel() {
                 body: JSON.stringify({ id: p.id, link: p.original_link, price: p.price })
             });
             const data = await res.json();
-            
             if(data.status === 'updated') { addLog(`💰 Mudou: R$${data.old} -> R$${data.new}`); changed++; }
             else if(data.status === 'deleted') { addLog(`💀 Removido`); changed++; }
             else if(data.status === 'error') { addLog(`⚠️ Erro: ${data.reason}`); }
-            else addLog(`✅ OK`);
-            
+            else addLog(`✅ Preço OK`);
         } catch(e) { addLog(`⚠️ Falha Conexão`); }
         await new Promise(r => setTimeout(r, 800));
     }
@@ -348,7 +397,6 @@ export default function AdminPanel() {
   async function processarImportacao() {
       setLoading(true);
       let updates = [];
-      
       if(importMode === 'list') {
           const links = affiliateLinks.split('\n').map(l=>l.trim()).filter(l=>l);
           if(links.length === 0) return alert("Cole os links!");
@@ -367,7 +415,6 @@ export default function AdminPanel() {
               }
           }
       }
-
       if(updates.length > 0) {
           try {
               const res = await fetch('/api/bulk-update-links', { 
@@ -383,12 +430,27 @@ export default function AdminPanel() {
       setLoading(false);
   }
 
-  async function saveUploadedProduct(data: any, link: string, file: File) {
+  async function saveUploadedProduct(data: any, link: string, file: File, customImageFile: File | null, customImageUrl: string) {
       const isFlash = activeTab === 'flash';
-      const fileName = `${Date.now()}_${file.name.replace(/\s/g, '')}`;
-      const { error: upErr } = await supabase.storage.from('uploads').upload(fileName, file);
-      if(upErr) return alert("Erro upload imagem");
-      const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+      let finalImageUrl = "";
+
+      if (customImageFile) {
+          const fileName = `custom_${Date.now()}_${customImageFile.name.replace(/\s/g, '')}`;
+          const { error: upErr } = await supabase.storage.from('uploads').upload(fileName, customImageFile);
+          if (upErr) return alert("Erro ao subir imagem personalizada");
+          const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+          finalImageUrl = urlData.publicUrl;
+      } 
+      else if (customImageUrl && customImageUrl.length > 10) {
+          finalImageUrl = customImageUrl;
+      }
+      else {
+          const fileName = `print_${Date.now()}_${file.name.replace(/\s/g, '')}`;
+          const { error: upErr } = await supabase.storage.from('uploads').upload(fileName, file);
+          if (upErr) return alert("Erro ao subir print");
+          const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+          finalImageUrl = urlData.publicUrl;
+      }
       
       const { error } = await supabase.from('products').insert([{
           title: data.title,
@@ -396,9 +458,12 @@ export default function AdminPanel() {
           original_price: data.price * 1.3,
           link: link,
           original_link: link,
-          image: urlData.publicUrl,
+          image: finalImageUrl,
           category: data.category || 'notebooks',
           brand: data.brand || 'Genérico',
+          rating: 4.5,
+          short_description: data.shortDescription,
+          full_review: data.fullReview, // Agora salva o JSON puro correto
           status: 'pending',
           expires_at: isFlash ? new Date(Date.now() + 86400000).toISOString() : null
       }]);
@@ -433,7 +498,8 @@ export default function AdminPanel() {
       </header>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* === COLUNA ESQUERDA: ROBÔ & LOGS === */}
+        
+        {/* === COLUNA ESQUERDA: ROBÔ & CONFIGS === */}
         <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 h-fit shadow-sm">
           <h2 className="font-bold text-lg mb-4 text-white flex items-center gap-2"><Search size={20}/> Robô de Busca</h2>
           <textarea 
@@ -472,7 +538,6 @@ export default function AdminPanel() {
             {loading ? <Loader2 className="animate-spin"/> : <Play size={18}/>} Rodar Robô
           </button>
           
-          {/* TERMINAL DE LOGS */}
           <div className="bg-black text-green-500 p-4 rounded-lg text-[10px] font-mono h-48 overflow-y-auto border border-zinc-800 shadow-inner">
              <div className="flex items-center gap-2 border-b border-zinc-800 pb-2 mb-2 text-zinc-500 font-bold"><Terminal size={12}/> TERMINAL OUTPUT</div>
              {statusLog.length === 0 && <span className="text-zinc-700 italic">Aguardando comando...</span>}
@@ -482,7 +547,7 @@ export default function AdminPanel() {
 
         {/* === COLUNA DIREITA: TABELA === */}
         <div className="lg:col-span-2 bg-zinc-900 p-6 rounded-xl border border-zinc-800 flex flex-col h-[800px]">
-          {/* TOPO: BOTÕES DE AÇÃO */}
+          {/* BOTÕES DE AÇÃO SUPERIORES */}
           <div className="flex flex-wrap gap-2 mb-6 justify-end items-center">
              {activeTab === 'approved' && (
                  <div className="flex items-center gap-2 border border-zinc-700 p-1 pl-3 rounded-lg bg-zinc-950">
@@ -512,7 +577,7 @@ export default function AdminPanel() {
              <button onClick={()=>setActiveTab('flash')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='flash'?'border-orange-500 text-orange-500':'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Zap size={16}/> Relâmpago</button>
           </div>
 
-          {/* CONTEÚDO DA TABELA */}
+          {/* TABELA / GRID */}
           <div className="flex-1 overflow-auto custom-scrollbar bg-zinc-950/50 rounded-lg border border-zinc-800">
              {activeTab === 'upload' || activeTab === 'flash' ? (
                  <div className="p-4 grid gap-4">
@@ -522,7 +587,13 @@ export default function AdminPanel() {
                         <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Arraste prints aqui</span>
                      </div>
                      {uploadFiles.map((f, i) => (
-                        <UploadCard key={i} file={f} isFlashDeal={activeTab==='flash'} onRemove={(n: string) => setUploadFiles(uploadFiles.filter(x => x.name !== n))} onSave={saveUploadedProduct}/>
+                        <UploadCard 
+                            key={i} 
+                            file={f} 
+                            isFlashDeal={activeTab==='flash'} 
+                            onRemove={(n: string)=>setUploadFiles(uploadFiles.filter(x=>x.name!==n))} 
+                            onSave={saveUploadedProduct}
+                        />
                      ))}
                  </div>
              ) : (
@@ -568,7 +639,7 @@ export default function AdminPanel() {
                   )}
 
                   <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800">
-                      <button onClick={()=>setShowImportModal(false)} className="px-4 py-2 text-sm font-bold text-zinc-500 hover:bg-zinc-800 rounded-lg">Cancelar</button>
+                      <button onClick={()=>setShowImportModal(false)} className="px-4 py-2 text-sm font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg">Cancelar</button>
                       <button onClick={processarImportacao} disabled={loading} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50">
                           {loading ? <Loader2 className="animate-spin"/> : <UploadCloud size={16}/>} Processar
                       </button>
