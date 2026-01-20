@@ -32,11 +32,18 @@ export async function POST(req) {
         return NextResponse.json({ error: "Produto não encontrado no banco" }, { status: 404 });
     }
 
-    const original_link = produto.original_link;
+    const original_link = produto.original_link || "";
     const currentPrice = produto.price;
 
+    // --- 🛑 FILTRO DE SEGURANÇA (NOVO) ---
+    // Se o link original for um link de afiliado (/sec/), pulamos a auditoria
+    if (original_link.includes('/sec/') || original_link.includes('mercadolivre.com/sec')) {
+        console.log(`⏭️ SKIPPED: Link de afiliado detectado na coluna original. ID: ${id}`);
+        return NextResponse.json({ status: 'skipped', reason: 'Link Afiliado na origem' });
+    }
+    // -------------------------------------
+
     // 2. O GRANDE DELAY (Segurança contra Bloqueio)
-    // O código vai "dormir" aqui por 1 minuto antes de bater na porta do ML
     console.log(`⏳ Aguardando 1 minuto (60s) para evitar bloqueio...`);
     await sleep(60000); 
 
@@ -88,7 +95,6 @@ export async function POST(req) {
         return NextResponse.json({ status: 'deleted', reason: 'Pausado' });
     }
 
-    // Se não achou título e nem erro, provavelmente é Captcha
     if (!titulo) {
         console.log(`⚠️ Título não carregou (Possível Captcha).`);
         return NextResponse.json({ status: 'skipped', reason: 'Bloqueio/Captcha' });
@@ -97,15 +103,13 @@ export async function POST(req) {
     // 4. Busca de Preço
     let precoReal = 0;
 
-    // Tenta via Meta Tag (Mais confiável)
     const metaPrice = $('meta[itemprop="price"]').attr('content');
     if (metaPrice) precoReal = parseFloat(metaPrice);
 
-    // Se falhar, tenta via Visual
     if (!precoReal) {
         $('.andes-money-amount__fraction').each((i, el) => {
             const val = parseFloat($(el).text().replace(/\./g, "").replace(",", "."));
-            if (val > 50) { precoReal = val; return false; } // Pega o primeiro valor coerente
+            if (val > 50) { precoReal = val; return false; } 
         });
     }
 

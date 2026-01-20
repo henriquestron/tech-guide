@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, FileText, X, List, Copy, ArrowRight, Terminal, Timer, Camera } from 'lucide-react';
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, FileText, X, List, Copy, ArrowRight, Terminal, Timer, Camera, CheckSquare, Square } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE CATEGORIAS ---
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
@@ -15,7 +15,7 @@ const subOptionsMap: Record<string, { label: string; value: string }[]> = {
   relogios: [ { label: 'Smartwatch', value: 'smartwatch' }, { label: 'Esportivo', value: 'esportivo' } ]
 };
 
-// --- BOTÃO DE AUDITORIA LENTA (Client Side Call) ---
+// --- BOTÃO INDIVIDUAL (Mantido) ---
 function SlowAuditButton({ product }: { product: any }) {
     const [loading, setLoading] = useState(false);
     const [statusLabel, setStatusLabel] = useState<string | null>(null);
@@ -24,18 +24,12 @@ function SlowAuditButton({ product }: { product: any }) {
         setLoading(true);
         setStatusLabel("60s..."); 
         try {
-            // Chama a rota manual-audit que agora tem o Puppeteer
             const res = await fetch('/api/manual-audit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    id: product.id, 
-                    link: product.original_link, 
-                    price: product.price 
-                }),
+                body: JSON.stringify({ id: product.id }),
             });
             const data = await res.json();
-            
             if (res.ok) {
                 if (data.status === 'updated') setStatusLabel(`✅ R$ ${data.new}`);
                 else if (data.status === 'ok') setStatusLabel("✅ Igual");
@@ -54,14 +48,12 @@ function SlowAuditButton({ product }: { product: any }) {
     );
 }
 
-// --- CARD DE UPLOAD (CSS Corrigido) ---
+// --- CARD UPLOAD (Mantido) ---
 function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [link, setLink] = useState('');
     const [saving, setSaving] = useState(false);
-    
-    // Custom Image States
     const [customImageFile, setCustomImageFile] = useState<File | null>(null);
     const [customImageUrl, setCustomImageUrl] = useState('');
 
@@ -98,8 +90,6 @@ function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
     return (
         <div className={`relative p-3 rounded-xl border flex gap-3 transition-all shadow-sm group ${isFlashDeal ? 'bg-orange-950/10 border-orange-800' : 'bg-zinc-900 border-zinc-700'}`}>
              <button onClick={() => onRemove(file.name)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10 hover:bg-red-700"><Trash size={12}/></button>
-             
-             {/* Imagem */}
              <div className="flex flex-col gap-2 w-24 flex-shrink-0">
                  <div className="w-24 h-24 bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden relative group/img">
                      <img src={previewSrc} className="w-full h-full object-contain"/>
@@ -109,40 +99,17 @@ function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
                         <input type="file" accept="image/*" className="hidden" onChange={handleCustomFileChange} />
                      </label>
                  </div>
-                 <input 
-                    value={customImageUrl} 
-                    onChange={e => { setCustomImageUrl(e.target.value); setCustomImageFile(null); }} 
-                    placeholder="Link Img..." 
-                    className="text-[9px] bg-zinc-950 border border-zinc-700 rounded p-1 outline-none text-zinc-300 focus:border-blue-500 placeholder:text-zinc-600"
-                 />
+                 <input value={customImageUrl} onChange={e => { setCustomImageUrl(e.target.value); setCustomImageFile(null); }} placeholder="Link Img..." className="text-[9px] bg-zinc-950 border border-zinc-700 rounded p-1 outline-none text-zinc-300 focus:border-blue-500 placeholder:text-zinc-600"/>
              </div>
-
-             {/* Dados */}
              <div className="flex-1 flex flex-col gap-2 min-w-0">
-                 <input 
-                    value={data?.title || ''} 
-                    onChange={e => setData({...data, title: e.target.value})} 
-                    className="font-bold text-xs bg-transparent border-b border-zinc-700 w-full outline-none focus:border-blue-500 text-zinc-100 truncate" 
-                    placeholder="Nome do produto..."
-                 />
-                 
+                 <input value={data?.title || ''} onChange={e => setData({...data, title: e.target.value})} className="font-bold text-xs bg-transparent border-b border-zinc-700 w-full outline-none focus:border-blue-500 text-zinc-100 truncate" placeholder="Nome do produto..."/>
                  <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold bg-green-900/30 text-green-400 border border-green-900 px-2 py-0.5 rounded">R$ {data?.price}</span>
                     <span className="text-[10px] uppercase text-zinc-400 font-bold border border-zinc-700 px-1 rounded">{data?.brand || "GENERICO"}</span>
                  </div>
-
                  <div className="flex gap-2 items-center mt-auto">
-                    <input 
-                        value={link} 
-                        onChange={e => setLink(e.target.value)} 
-                        placeholder="Link Afiliado (Obrigatório)..." 
-                        className="flex-1 text-[10px] bg-zinc-950 border border-zinc-700 rounded p-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-zinc-200 placeholder:text-zinc-600"
-                    />
-                    <button 
-                        onClick={handleSave} 
-                        disabled={saving || !link} 
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-all disabled:opacity-50"
-                    >
+                    <input value={link} onChange={e => setLink(e.target.value)} placeholder="Link Afiliado (Obrigatório)..." className="flex-1 text-[10px] bg-zinc-950 border border-zinc-700 rounded p-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-zinc-200 placeholder:text-zinc-600"/>
+                    <button onClick={handleSave} disabled={saving || !link} className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-all disabled:opacity-50">
                         {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Salvar
                     </button>
                  </div>
@@ -151,8 +118,8 @@ function UploadCard({ file, onRemove, onSave, isFlashDeal }: any) {
     );
 }
 
-// --- LINHA DO PRODUTO (Com Auditoria Individual e IA Fix) ---
-function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory }: any) {
+// --- LINHA DA TABELA (Com Checkbox e Botões) ---
+function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory, isSelected, onToggleSelect }: any) {
   const [link, setLink] = useState(product.link || '');
   const [isModified, setIsModified] = useState(false);
   const [auditing, setAuditing] = useState(false);
@@ -163,29 +130,30 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
   const hasOriginalLink = product.original_link && product.original_link.includes('mercadolivre');
 
   return (
-    <tr className={`border-b border-zinc-800 transition-colors hover:bg-zinc-900/50`}>
+    <tr className={`border-b border-zinc-800 transition-colors ${isSelected ? 'bg-blue-900/20' : 'hover:bg-zinc-900/50'}`}>
+      <td className="p-2 text-center align-middle">
+          {/* CHECKBOX DE SELEÇÃO */}
+          <button onClick={() => onToggleSelect(product.id)} className="text-zinc-500 hover:text-blue-500 transition-colors">
+              {isSelected ? <CheckSquare size={18} className="text-blue-500" /> : <Square size={18} />}
+          </button>
+      </td>
       <td className="p-2 text-center align-top pt-4">
         {product.image ? <img src={product.image} className="w-12 h-12 object-contain mx-auto border border-zinc-700 rounded bg-white"/> : <span className="text-xl">📦</span>}
       </td>
       
       <td className="p-3 align-top">
         <div className="flex items-center gap-2">
-            <div className="font-bold text-zinc-200 text-xs mb-1 line-clamp-2" title={product.title}>{product.title}</div>
+            <div className="font-bold text-zinc-100 text-xs mb-1 line-clamp-2" title={product.title}>{product.title}</div>
             {isFlash && <span className="bg-orange-900/30 text-orange-400 border border-orange-800 text-[10px] px-1 rounded font-bold flex items-center gap-1"><Zap size={10} fill="currentColor"/> 24h</span>}
         </div>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
              <span className="text-[10px] uppercase font-bold text-zinc-400 border border-zinc-700 px-1 rounded">{product.brand || "Tech"}</span>
              
-             {/* Preço + Audit */}
              <div className="flex items-center gap-1">
                  <span className="text-green-400 font-bold bg-green-900/20 border border-green-900 px-1.5 py-0.5 rounded text-[10px]">R$ {product.price}</span>
                  {hasOriginalLink && (
                      <div className="flex gap-1">
-                        <button 
-                            onClick={() => { setAuditing(true); onAuditSingle(product).finally(()=>setAuditing(false)); }} 
-                            className="text-zinc-400 hover:text-blue-400 p-1 rounded-full hover:bg-zinc-800 transition-colors" 
-                            title="Audit Rápido (API)" disabled={auditing}
-                        >
+                        <button onClick={() => { setAuditing(true); onAuditSingle(product).finally(()=>setAuditing(false)); }} className="text-zinc-400 hover:text-blue-400 p-1 rounded-full hover:bg-zinc-800 transition-colors" title="Audit Rápido" disabled={auditing}>
                             {auditing ? <Loader2 size={10} className="animate-spin text-blue-500"/> : <RefreshCw size={10}/>}
                         </button>
                         <SlowAuditButton product={product} />
@@ -193,14 +161,9 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
                  )}
              </div>
 
-             {/* Categoria + IA Fix */}
              <div className="flex items-center gap-1">
                 <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1 rounded">{product.category}</span>
-                <button 
-                    onClick={() => { setFixing(true); onFixCategory(product).finally(()=>setFixing(false)); }}
-                    className="text-zinc-400 hover:text-purple-400 p-1 rounded-full hover:bg-zinc-800 transition-colors"
-                    title="IA: Corrigir Categoria" disabled={fixing}
-                >
+                <button onClick={() => { setFixing(true); onFixCategory(product).finally(()=>setFixing(false)); }} className="text-zinc-400 hover:text-purple-400 p-1 rounded-full hover:bg-zinc-800 transition-colors" title="IA Fix" disabled={fixing}>
                     {fixing ? <Loader2 size={10} className="animate-spin text-purple-500"/> : <Sparkles size={10}/>}
                 </button>
              </div>
@@ -211,12 +174,7 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
         <div className="flex flex-col gap-2">
             <div className={`flex items-center gap-1 border rounded p-1 transition-colors ${isPending && !link.includes('/sec/') ? 'border-yellow-600 bg-yellow-900/20' : 'border-zinc-700 bg-zinc-950'}`}>
                 <LinkIcon size={12} className="text-zinc-400"/>
-                <input 
-                    value={link} 
-                    onChange={(e) => { setLink(e.target.value); setIsModified(true); }} 
-                    placeholder="Link Afiliado..." 
-                    className="flex-1 text-xs bg-transparent outline-none text-zinc-200 placeholder:text-zinc-600"
-                />
+                <input value={link} onChange={(e) => { setLink(e.target.value); setIsModified(true); }} placeholder="Link Afiliado..." className="flex-1 text-xs bg-transparent outline-none text-zinc-200"/>
             </div>
             <div className="flex gap-2">
                 <a href={product.link} target="_blank" className="p-1.5 text-zinc-400 hover:text-blue-400 bg-zinc-800 rounded"><ExternalLink size={14}/></a>
@@ -234,7 +192,7 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
   );
 }
 
-// --- PÁGINA PRINCIPAL ---
+// --- PAINEL PRINCIPAL ---
 export default function AdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState('');
@@ -245,7 +203,6 @@ export default function AdminPanel() {
   const [categoria, setCategoria] = useState('notebooks');
   const [subcategoria, setSubcategoria] = useState('');
   
-  // Limites
   const [limit, setLimit] = useState(3); 
   const [auditLimit, setAuditLimit] = useState(5); 
 
@@ -254,7 +211,10 @@ export default function AdminPanel() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   
-  // Importação Modal
+  // SELEÇÃO MÚLTIPLA
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Importação
   const [showImportModal, setShowImportModal] = useState(false);
   const [importMode, setImportMode] = useState<'txt' | 'list'>('list');
   const [importText, setImportText] = useState('');
@@ -280,8 +240,23 @@ export default function AdminPanel() {
     if (activeTab === 'flash') query = query.not('expires_at', 'is', null);
     const { data } = await query;
     setProdutos(data || []);
+    setSelectedIds(new Set()); // Limpa seleção ao recarregar
   }
 
+  // --- LÓGICA DE SELEÇÃO ---
+  const toggleSelect = (id: number) => {
+      const newSet = new Set(selectedIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setSelectedIds(newSet);
+  };
+
+  const toggleSelectAll = () => {
+      if (selectedIds.size === produtos.length) setSelectedIds(new Set());
+      else setSelectedIds(new Set(produtos.map(p => p.id)));
+  };
+
+  // --- FUNÇÕES CRUD ---
   async function handleApproveOrSave(id: any, newLink: string) {
     const { error } = await supabase.from('products').update({ link: newLink, status: 'approved' }).eq('id', id);
     if (!error) {
@@ -298,7 +273,6 @@ export default function AdminPanel() {
 
   function addLog(msg: string) { setStatusLog(prev => [...prev, msg]); }
 
-  // --- ROBÔ DE BUSCA ---
   async function rodarRobo() {
     if (!termoBusca) return alert("Digite o termo!");
     setLoading(true); setStatusLog([]); 
@@ -320,44 +294,82 @@ export default function AdminPanel() {
         } catch(e:any) { addLog(`❌ Erro Fatal: ${e.message}`); }
         await new Promise(r => setTimeout(r, 1000));
     }
-    
     setLoading(false);
     if(activeTab === 'pending') fetchProdutos();
     addLog("\n🏁 Processo Finalizado.");
   }
 
-  // --- AUDITORIA EM MASSA ---
+  // --- AUDITORIA EM MASSA (COM SELEÇÃO E RELATÓRIO) ---
   async function auditarPrecos() {
-    const alvo = produtos.slice(0, auditLimit);
-    if (!confirm(`Auditar os primeiros ${alvo.length} produtos?`)) return;
+    // 1. Define quem auditar: Selecionados OU Top N
+    let produtosAlvo = [];
+    if (selectedIds.size > 0) {
+        produtosAlvo = produtos.filter(p => selectedIds.has(p.id));
+    } else {
+        produtosAlvo = produtos.slice(0, auditLimit);
+    }
+
+    if (!confirm(`Auditar ${produtosAlvo.length} produtos? Isso pode levar ${produtosAlvo.length} minutos.`)) return;
+    
     setLoading(true); setStatusLog([]);
-    addLog(`🩺 Auditando ${alvo.length} itens...`);
+    addLog(`🩺 Iniciando Auditoria de ${produtosAlvo.length} itens...`);
+    
+    let reportLog = [`RELATÓRIO DE AUDITORIA - ${new Date().toLocaleString()}`, "---------------------------------------------------"];
     let changed = 0;
-    for (const p of alvo) {
-        addLog(`🔍 ${p.title.substring(0,20)}...`);
+    
+    for (const p of produtosAlvo) {
+        addLog(`⏳ Analisando: ${p.title.substring(0,25)}...`);
+        
         try {
             const res = await fetch('/api/manual-audit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: p.id, link: p.original_link, price: p.price })
+                body: JSON.stringify({ id: p.id })
             });
             const data = await res.json();
-            if(data.status === 'updated') { addLog(`💰 Mudou: R$${data.old} -> R$${data.new}`); changed++; }
-            else if(data.status === 'deleted') { addLog(`💀 Removido`); changed++; }
-            else if(data.status === 'error') { addLog(`⚠️ Erro: ${data.reason}`); }
-            else addLog(`✅ Preço OK`);
-        } catch(e) { addLog(`⚠️ Falha Conexão`); }
-        await new Promise(r => setTimeout(r, 800));
+            
+            let logLine = "";
+            if(data.status === 'updated') { 
+                logLine = `[ATUALIZADO] ${p.title} | R$${data.old} -> R$${data.new}`;
+                addLog(`💰 ${logLine}`);
+                changed++; 
+            }
+            else if(data.status === 'deleted') { 
+                logLine = `[REMOVIDO] ${p.title} | Motivo: ${data.reason}`;
+                addLog(`💀 ${logLine}`);
+                changed++; 
+            }
+            else if(data.status === 'error') {
+                logLine = `[ERRO] ${p.title} | ${data.reason}`;
+                addLog(`⚠️ ${logLine}`);
+            }
+            else {
+                logLine = `[OK] ${p.title} | Preço inalterado`;
+                addLog(`✅ OK`);
+            }
+            reportLog.push(logLine);
+
+        } catch(e) { addLog(`⚠️ Falha Conexão`); reportLog.push(`[FALHA] ${p.title}`); }
+        
+        // Pequena pausa para o front não travar, o delay real de 60s está no back
     }
+    
     setLoading(false);
     if(changed > 0) fetchProdutos();
-    addLog(`🏁 Auditoria Finalizada.`);
+    addLog(`🏁 Fim da Auditoria.`);
+    
+    // Gerar TXT do relatório
+    const blob = new Blob([reportLog.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `auditoria_${Date.now()}.txt`;
+    a.click();
   }
 
-  // --- FUNÇÕES INDIVIDUAIS (Passadas para ProductRow) ---
   async function auditSingleProduct(p: any) {
       try {
-        const res = await fetch('/api/manual-audit', { method: 'POST', body: JSON.stringify({ id: p.id, link: p.original_link, price: p.price }) });
+        const res = await fetch('/api/manual-audit', { method: 'POST', body: JSON.stringify({ id: p.id }) });
         const data = await res.json();
         if(data.status === 'updated') { alert(`Preço atualizado: R$ ${data.new}`); fetchProdutos(); }
         else if(data.status === 'deleted') { alert("Produto removido do ML."); fetchProdutos(); }
@@ -393,7 +405,6 @@ export default function AdminPanel() {
     addLog(`🏁 ${count} produtos corrigidos.`);
   }
 
-  // --- IMPORTAÇÃO ---
   async function processarImportacao() {
       setLoading(true);
       let updates = [];
@@ -461,11 +472,11 @@ export default function AdminPanel() {
           image: finalImageUrl,
           category: data.category || 'notebooks',
           brand: data.brand || 'Genérico',
-          rating: 4.5,
-          short_description: data.shortDescription,
-          full_review: data.fullReview, // Agora salva o JSON puro correto
           status: 'pending',
-          expires_at: isFlash ? new Date(Date.now() + 86400000).toISOString() : null
+          expires_at: isFlash ? new Date(Date.now() + 86400000).toISOString() : null,
+          short_description: data.shortDescription,
+          rating: data.rating,
+          full_review: data.fullReview
       }]);
       
       if(!error) { alert("Salvo!"); setUploadFiles(prev => prev.filter(f => f !== file)); }
@@ -498,8 +509,6 @@ export default function AdminPanel() {
       </header>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* === COLUNA ESQUERDA: ROBÔ & CONFIGS === */}
         <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 h-fit shadow-sm">
           <h2 className="font-bold text-lg mb-4 text-white flex items-center gap-2"><Search size={20}/> Robô de Busca</h2>
           <textarea 
@@ -545,9 +554,7 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* === COLUNA DIREITA: TABELA === */}
         <div className="lg:col-span-2 bg-zinc-900 p-6 rounded-xl border border-zinc-800 flex flex-col h-[800px]">
-          {/* BOTÕES DE AÇÃO SUPERIORES */}
           <div className="flex flex-wrap gap-2 mb-6 justify-end items-center">
              {activeTab === 'approved' && (
                  <div className="flex items-center gap-2 border border-zinc-700 p-1 pl-3 rounded-lg bg-zinc-950">
@@ -558,9 +565,15 @@ export default function AdminPanel() {
                         value={auditLimit} 
                         onChange={e=>setAuditLimit(Number(e.target.value))} 
                         className="w-10 text-center bg-transparent outline-none text-xs font-bold text-white"
+                        disabled={selectedIds.size > 0} // Desabilita se tiver checkbox selecionado
                     />
-                    <button onClick={auditarPrecos} disabled={loading} className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-xs font-bold flex items-center gap-1 transition-colors">
-                        {loading ? <Loader2 size={12} className="animate-spin"/> : <Activity size={14}/>} Auditar
+                    <button 
+                        onClick={auditarPrecos} 
+                        disabled={loading} 
+                        className={`px-3 py-1.5 text-white rounded-md text-xs font-bold flex items-center gap-1 transition-colors ${selectedIds.size > 0 ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-orange-600 hover:bg-orange-700'}`}
+                    >
+                        {loading ? <Loader2 size={12} className="animate-spin"/> : <Activity size={14}/>} 
+                        {selectedIds.size > 0 ? `Auditar (${selectedIds.size})` : 'Auditar'}
                     </button>
                  </div>
              )}
@@ -569,7 +582,6 @@ export default function AdminPanel() {
              <button onClick={baixarTxt} className="px-3 py-2 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs font-bold flex items-center gap-1"><Download size={14}/> TXT</button>
           </div>
 
-          {/* ABAS */}
           <div className="flex gap-4 border-b border-zinc-800 mb-4 overflow-x-auto">
              <button onClick={()=>setActiveTab('pending')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='pending'?'border-blue-500 text-blue-500':'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Clock size={16}/> Pendentes</button>
              <button onClick={()=>setActiveTab('approved')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='approved'?'border-green-500 text-green-500':'border-transparent text-zinc-500 hover:text-zinc-300'}`}><CheckCircle size={16}/> Publicados</button>
@@ -577,7 +589,6 @@ export default function AdminPanel() {
              <button onClick={()=>setActiveTab('flash')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='flash'?'border-orange-500 text-orange-500':'border-transparent text-zinc-500 hover:text-zinc-300'}`}><Zap size={16}/> Relâmpago</button>
           </div>
 
-          {/* TABELA / GRID */}
           <div className="flex-1 overflow-auto custom-scrollbar bg-zinc-950/50 rounded-lg border border-zinc-800">
              {activeTab === 'upload' || activeTab === 'flash' ? (
                  <div className="p-4 grid gap-4">
@@ -599,10 +610,29 @@ export default function AdminPanel() {
              ) : (
                  <table className="w-full text-left text-sm">
                     <thead className="bg-zinc-900 text-zinc-500 sticky top-0 z-10 text-xs uppercase font-bold border-b border-zinc-800">
-                        <tr><th className="p-3 w-16 text-center">Img</th><th className="p-3">Produto</th><th className="p-3">Link</th><th className="p-3 w-20 text-center">Ação</th></tr>
+                        <tr>
+                            <th className="p-3 w-10 text-center">
+                                <button onClick={toggleSelectAll}>{selectedIds.size === produtos.length ? <CheckSquare size={16}/> : <Square size={16}/>}</button>
+                            </th>
+                            <th className="p-3 w-16 text-center">Img</th>
+                            <th className="p-3">Produto</th>
+                            <th className="p-3">Link</th>
+                            <th className="p-3 w-20 text-center">Ação</th>
+                        </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800">
-                        {produtos.map(p => <ProductRow key={p.id} product={p} onDelete={handleDelete} onApprove={handleApproveOrSave} onAuditSingle={auditSingleProduct} onFixCategory={fixSingleCategory} />)}
+                        {produtos.map(p => (
+                            <ProductRow 
+                                key={p.id} 
+                                product={p} 
+                                onDelete={handleDelete} 
+                                onApprove={handleApproveOrSave} 
+                                onAuditSingle={auditSingleProduct} 
+                                onFixCategory={fixSingleCategory}
+                                isSelected={selectedIds.has(p.id)}
+                                onToggleSelect={toggleSelect}
+                            />
+                        ))}
                     </tbody>
                  </table>
              )}
@@ -610,7 +640,6 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {/* MODAL DE IMPORTAÇÃO */}
       {showImportModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
               <div className="bg-zinc-900 w-full max-w-2xl rounded-xl shadow-2xl p-6 relative border border-zinc-700">
