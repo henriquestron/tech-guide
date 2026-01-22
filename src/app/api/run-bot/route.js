@@ -72,11 +72,21 @@ export async function POST(req) {
     let termoDeBusca = termo;
     try {
         const promptSearch = `
-        Você é um especialista em SEO para Mercado Livre.
-        SUA MISSÃO: Refinar o termo de busca do usuário para encontrar o PRODUTO PRINCIPAL com mais precisão.
-        REGRAS: Mantenha Marca/Modelo. Adicione specs (ex: 128gb, ssd). Evite termos ambíguos.
+        Atue como um motor de busca inteligente do Mercado Livre.
+        SUA MISSÃO: Refinar levemente o termo de busca para garantir que apareçam produtos e não acessórios.
+        
         O usuário digitou: "${termo}"
-        Responda APENAS o termo novo.
+
+        REGRAS RIGÍDAS:
+        1. PRESERVAÇÃO: Mantenha a marca e modelo exatos que o usuário digitou.
+        2. ESPECIFICIDADE: Se for eletrônico vago (ex: "iPhone"), adicione apenas a versão mais comum (ex: "iPhone 13"). Se for peça (ex: "SSD"), adicione capacidade (ex: "SSD 1TB").
+        3. PROIBIDO SINÔNIMOS: NÃO adicione palavras repetidas (ex: Se tem "Joystick", NÃO adicione "Controle" ou "Gamepad").
+        4. PROIBIDO LISTAR COMPATIBILIDADE: NÃO adicione lista de compatibilidade (ex: "PC Android PS4") a menos que o usuário peça.
+        5. MÁXIMO 5 PALAVRAS: O termo final deve ser curto e direto.
+        6. SE O TERMO JÁ FOR BOM: Responda exatamente o termo original.
+
+        Responda APENAS o termo novo, sem explicações.
+        
         `;
         
         const resultSearch = await model.generateContent(promptSearch);
