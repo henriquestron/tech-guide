@@ -5,21 +5,21 @@ import OneSignal from 'react-onesignal';
 
 export default function OneSignalSetup() {
   useEffect(() => {
-    // Só roda no navegador
     if (typeof window !== 'undefined') {
+      // 1. CHUMBE O ID AQUI (Sem usar process.env por enquanto)
+      const myAppId = "963cf838-b1dd-4337-a046-34cbb40c0da7"; 
+
       try {
         OneSignal.init({
-          appId: "963cf838-b1dd-4337-a046-34cbb40c0da7", // Seu ID real aqui, // O '!' força o typescript aceitar, // <--- COLAR SEU APP ID
-          allowLocalhostAsSecureOrigin: true,
-
+          appId: myAppId, 
+          // allowLocalhostAsSecureOrigin: true, // <--- COMENTE ESSA LINHA EM PRODUÇÃO
+          
           notifyButton: {
             enable: true,
             showCredit: false,
             prenotify: true,
             position: 'bottom-right',
             size: 'medium',
-
-            // Traduções COMPLETAS para Português (Corrige o erro de Typescript)
             text: {
               'tip.state.unsubscribed': 'Inscrever-se para ofertas',
               'tip.state.subscribed': 'Você está inscrito!',
@@ -32,26 +32,19 @@ export default function OneSignalSetup() {
               'dialog.main.button.unsubscribe': 'CANCELAR INSCRIÇÃO',
               'dialog.blocked.title': 'Desbloquear Notificações',
               'dialog.blocked.message': 'Siga as instruções para permitir notificações.',
-
-              // --- AS DUAS QUE FALTAVAM ---
               'message.action.subscribing': 'Inscrevendo-se...',
               'message.prenotify': 'Clique para receber ofertas exclusivas',
             }
           },
         });
+        
+        console.log("✅ OneSignal iniciado com ID Fixo:", myAppId);
+
       } catch (error) {
-        console.log("OneSignal já inicializado ou erro.");
+        console.error("Erro OneSignal:", error);
       }
     }
-    // ... dentro do useEffect ...
-    console.log("🔍 DEBUG: ID do OneSignal:", process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID);
-
-    if (!process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) {
-      console.error("❌ ERRO CRÍTICO: Variável de ambiente vazia!");
-    }
-    // ...
   }, []);
-
 
   return null;
 }
