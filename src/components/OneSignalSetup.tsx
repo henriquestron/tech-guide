@@ -9,7 +9,7 @@ export default function OneSignalSetup() {
     if (typeof window !== 'undefined') {
       try {
         OneSignal.init({
-          appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!, // O '!' força o typescript aceitar, // <--- COLAR SEU APP ID
+          appId: "963cf838-b1dd-4337-a046-34cbb40c0da7", // Seu ID real aqui, // O '!' força o typescript aceitar, // <--- COLAR SEU APP ID
           allowLocalhostAsSecureOrigin: true,
 
           notifyButton: {
