@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, FileText, X, List, Copy, ArrowRight, Terminal, Timer, Camera, CheckSquare, Square } from 'lucide-react';
+import { Bot, Play, Save, Trash, Download, LogOut, RefreshCw, Search, Loader2, Link as LinkIcon, Sparkles, CheckCircle, Clock, ExternalLink, Activity, Image as ImageIcon, UploadCloud, Zap, FileText, X, List, Copy, ArrowRight, Terminal, Timer, Camera, CheckSquare, Square, TrendingUp, BellRing, MessageCircle } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE CATEGORIAS ---
 const subOptionsMap: Record<string, { label: string; value: string }[]> = {
@@ -214,11 +214,19 @@ export default function AdminPanel() {
   // SELEÇÃO MÚLTIPLA
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  // Importação
+  // MODAIS
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDemandModal, setShowDemandModal] = useState(false); 
+  const [showLeadsModal, setShowLeadsModal] = useState(false); // NOVO: LEADS
+  
+  // Estado para importação
   const [importMode, setImportMode] = useState<'txt' | 'list'>('list');
   const [importText, setImportText] = useState('');
   const [affiliateLinks, setAffiliateLinks] = useState('');
+
+  // Estado para demandas e leads
+  const [demandas, setDemandas] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]); // NOVO: DADOS LEADS
 
   const currentSubOptions = subOptionsMap[categoria] || [];
 
@@ -241,6 +249,64 @@ export default function AdminPanel() {
     const { data } = await query;
     setProdutos(data || []);
     setSelectedIds(new Set()); // Limpa seleção ao recarregar
+  }
+
+  // --- LÓGICA DE DEMANDAS (BUSCAS 0 RESULTADOS) ---
+  async function analisarDemandas() {
+      setLoading(true);
+      const { data } = await supabase
+        .from('analytics_searches')
+        .select('*')
+        .eq('results_count', 0)
+        .order('searched_at', { ascending: false })
+        .limit(200);
+
+      if (data) {
+          const mapa = new Map();
+          data.forEach((item: any) => {
+              const termClean = item.term.trim().toLowerCase();
+              if(!mapa.has(termClean)) {
+                  mapa.set(termClean, { term: item.term, count: 1, last: item.searched_at });
+              } else {
+                  const existing = mapa.get(termClean);
+                  existing.count++;
+                  mapa.set(termClean, existing);
+              }
+          });
+          const listaAgrupada = Array.from(mapa.values()).sort((a: any, b: any) => b.count - a.count);
+          setDemandas(listaAgrupada);
+          setShowDemandModal(true);
+      }
+      setLoading(false);
+  }
+
+  // --- LÓGICA DE LEADS / ALERTAS (NOVO) ---
+  async function verLeads() {
+      setLoading(true);
+      // Pega todos os alertas pendentes (ordenados do mais novo pro mais antigo)
+      const { data } = await supabase
+        .from('price_alerts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (data) {
+          setLeads(data);
+          setShowLeadsModal(true);
+      }
+      setLoading(false);
+  }
+  
+  function gerarLinkZap(contato: string, produto: string) {
+      // Remove tudo que não é número
+      const num = contato.replace(/\D/g, '');
+      const msg = encodeURIComponent(`Olá! Vi que você tem interesse em "${produto}" na nossa loja. Conseguimos verificar a disponibilidade pra você!`);
+      return `https://wa.me/55${num}?text=${msg}`;
+  }
+
+  // Joga o termo da demanda pro robô
+  function usarTermoDemanda(termo: string) {
+      setTermoBusca(termo);
+      setShowDemandModal(false);
   }
 
   // --- LÓGICA DE SELEÇÃO ---
@@ -299,9 +365,8 @@ export default function AdminPanel() {
     addLog("\n🏁 Processo Finalizado.");
   }
 
-  // --- AUDITORIA EM MASSA (COM SELEÇÃO E RELATÓRIO) ---
+  // --- AUDITORIA ---
   async function auditarPrecos() {
-    // 1. Define quem auditar: Selecionados OU Top N
     let produtosAlvo = [];
     if (selectedIds.size > 0) {
         produtosAlvo = produtos.filter(p => selectedIds.has(p.id));
@@ -319,7 +384,6 @@ export default function AdminPanel() {
     
     for (const p of produtosAlvo) {
         addLog(`⏳ Analisando: ${p.title.substring(0,25)}...`);
-        
         try {
             const res = await fetch('/api/manual-audit', {
                 method: 'POST',
@@ -327,7 +391,6 @@ export default function AdminPanel() {
                 body: JSON.stringify({ id: p.id })
             });
             const data = await res.json();
-            
             let logLine = "";
             if(data.status === 'updated') { 
                 logLine = `[ATUALIZADO] ${p.title} | R$${data.old} -> R$${data.new}`;
@@ -348,17 +411,13 @@ export default function AdminPanel() {
                 addLog(`✅ OK`);
             }
             reportLog.push(logLine);
-
         } catch(e) { addLog(`⚠️ Falha Conexão`); reportLog.push(`[FALHA] ${p.title}`); }
-        
-        // Pequena pausa para o front não travar, o delay real de 60s está no back
     }
     
     setLoading(false);
     if(changed > 0) fetchProdutos();
     addLog(`🏁 Fim da Auditoria.`);
     
-    // Gerar TXT do relatório
     const blob = new Blob([reportLog.join('\n')], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -565,7 +624,7 @@ export default function AdminPanel() {
                         value={auditLimit} 
                         onChange={e=>setAuditLimit(Number(e.target.value))} 
                         className="w-10 text-center bg-transparent outline-none text-xs font-bold text-white"
-                        disabled={selectedIds.size > 0} // Desabilita se tiver checkbox selecionado
+                        disabled={selectedIds.size > 0} 
                     />
                     <button 
                         onClick={auditarPrecos} 
@@ -577,6 +636,18 @@ export default function AdminPanel() {
                     </button>
                  </div>
              )}
+
+             {/* NOVO BOTÃO DE LEADS / ALERTAS */}
+             <button onClick={verLeads} disabled={loading} className="px-3 py-2 bg-green-900/40 text-green-300 hover:bg-green-900/60 border border-green-800 rounded-lg text-xs font-bold flex items-center gap-1">
+                 {loading ? <Loader2 size={14} className="animate-spin"/> : <BellRing size={14}/>} 
+                 Leads (Alertas)
+             </button>
+
+             <button onClick={analisarDemandas} disabled={loading} className="px-3 py-2 bg-pink-900/40 text-pink-300 hover:bg-pink-900/60 border border-pink-800 rounded-lg text-xs font-bold flex items-center gap-1">
+                 {loading ? <Loader2 size={14} className="animate-spin"/> : <TrendingUp size={14}/>} 
+                 Demandas
+             </button>
+
              <button onClick={corrigirCategoriasMassivo} disabled={loading} className="px-3 py-2 bg-purple-900/40 text-purple-300 hover:bg-purple-900/60 border border-purple-800 rounded-lg text-xs font-bold flex items-center gap-1"><Sparkles size={14}/> Corrigir Todos</button>
              <button onClick={() => setShowImportModal(true)} className="px-3 py-2 bg-blue-900/40 text-blue-300 hover:bg-blue-900/60 border border-blue-800 rounded-lg text-xs font-bold flex items-center gap-1"><FileText size={14}/> Importar Links</button>
              <button onClick={baixarTxt} className="px-3 py-2 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs font-bold flex items-center gap-1"><Download size={14}/> TXT</button>
@@ -640,6 +711,7 @@ export default function AdminPanel() {
         </div>
       </div>
 
+      {/* MODAL IMPORTAR LINKS */}
       {showImportModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
               <div className="bg-zinc-900 w-full max-w-2xl rounded-xl shadow-2xl p-6 relative border border-zinc-700">
@@ -672,6 +744,99 @@ export default function AdminPanel() {
                       <button onClick={processarImportacao} disabled={loading} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50">
                           {loading ? <Loader2 className="animate-spin"/> : <UploadCloud size={16}/>} Processar
                       </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL: DEMANDAS */}
+      {showDemandModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+              <div className="bg-zinc-900 w-full max-w-2xl rounded-xl shadow-2xl p-6 relative border border-zinc-700 h-[600px] flex flex-col">
+                  <button onClick={()=>setShowDemandModal(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-red-500"><X/></button>
+                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white"><TrendingUp className="text-pink-500"/> Oportunidades de Venda</h2>
+                  <p className="text-zinc-400 text-xs mb-4">Estes são produtos que clientes buscaram mas não encontraram (0 resultados).</p>
+                  
+                  <div className="flex-1 overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg bg-zinc-950/50">
+                      {demandas.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-zinc-500">
+                              <Search size={48} className="mb-2 opacity-20"/>
+                              <p>Nenhuma oportunidade encontrada recentemente.</p>
+                          </div>
+                      ) : (
+                          <table className="w-full text-left text-sm">
+                              <thead className="bg-zinc-900 sticky top-0 text-xs uppercase font-bold text-zinc-500">
+                                  <tr>
+                                      <th className="p-3">Termo Pesquisado</th>
+                                      <th className="p-3 text-center">Tentativas</th>
+                                      <th className="p-3 text-right">Ação</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-800">
+                                  {demandas.map((d, i) => (
+                                      <tr key={i} className="hover:bg-zinc-900">
+                                          <td className="p-3 font-bold text-zinc-300">{d.term}</td>
+                                          <td className="p-3 text-center text-zinc-400">{d.count}</td>
+                                          <td className="p-3 text-right">
+                                              <button onClick={()=>usarTermoDemanda(d.term)} className="text-[10px] bg-blue-900/30 text-blue-400 hover:bg-blue-900/50 border border-blue-900 px-2 py-1 rounded font-bold transition-colors">
+                                                  🔍 Buscar Agora
+                                              </button>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL: LEADS / ALERTAS */}
+      {showLeadsModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+              <div className="bg-zinc-900 w-full max-w-3xl rounded-xl shadow-2xl p-6 relative border border-zinc-700 h-[600px] flex flex-col">
+                  <button onClick={()=>setShowLeadsModal(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-red-500"><X/></button>
+                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white"><BellRing className="text-green-500"/> Leads Capturados</h2>
+                  <p className="text-zinc-400 text-xs mb-4">Estes clientes pediram para ser avisados. Entre em contato e feche a venda!</p>
+                  
+                  <div className="flex-1 overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg bg-zinc-950/50">
+                      {leads.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-zinc-500">
+                              <BellRing size={48} className="mb-2 opacity-20"/>
+                              <p>Nenhum alerta cadastrado ainda.</p>
+                          </div>
+                      ) : (
+                          <table className="w-full text-left text-sm">
+                              <thead className="bg-zinc-900 sticky top-0 text-xs uppercase font-bold text-zinc-500">
+                                  <tr>
+                                      <th className="p-3">Data</th>
+                                      <th className="p-3">Produto/Termo</th>
+                                      <th className="p-3">Contato</th>
+                                      <th className="p-3 text-right">Ação</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-800">
+                                  {leads.map((lead) => (
+                                      <tr key={lead.id} className="hover:bg-zinc-900">
+                                          <td className="p-3 text-zinc-500 text-xs">{new Date(lead.created_at).toLocaleDateString()} <br/> {new Date(lead.created_at).toLocaleTimeString().slice(0,5)}</td>
+                                          <td className="p-3 font-bold text-zinc-300">{lead.search_term || "Produto Existente"}</td>
+                                          <td className="p-3 text-blue-400 font-mono text-xs">{lead.user_contact}</td>
+                                          <td className="p-3 text-right">
+                                              <a 
+                                                  href={gerarLinkZap(lead.user_contact, lead.search_term || "Produto")}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="inline-flex items-center gap-1 text-[10px] bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full font-bold transition-colors"
+                                              >
+                                                  <MessageCircle size={12}/> Chamar no Zap
+                                              </a>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      )}
                   </div>
               </div>
           </div>

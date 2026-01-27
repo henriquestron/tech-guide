@@ -1,8 +1,9 @@
 "use client";
 
-import { Star, Eye, Heart, ShoppingBag, Share2 } from "lucide-react"; // Importei o Share2
+import { Star, Eye, Heart, ShoppingBag, Share2 } from "lucide-react";
 import { useFavorites } from "@/context/FavoritesContext";
-import Link from "next/link"; // Para linkar internamente se precisar
+import Link from "next/link";
+import OneSignal from 'react-onesignal'; // <--- 1. IMPORTAMOS AQUI
 
 interface ProductCardProps {
   product: any;
@@ -43,15 +44,26 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
 
   const btnText = isAvailable ? "Mercado Livre" : "Indisponível";
 
+  // --- FUNÇÃO: RASTREAR INTERESSE (TAGGING) ---
+  const handleBuyClick = () => {
+      try {
+          // Se o usuário clicar, marcamos que ele gosta dessa categoria
+          const tagInterest = category.toLowerCase().split(' ')[0]; // Pega 'celulares' de 'Celulares Samsung'
+          console.log(`🏷️ OneSignal: Marcando interesse em '${tagInterest}'`);
+          OneSignal.User.addTag("interest", tagInterest);
+      } catch (e) {
+          // Falha silenciosa para não atrapalhar o clique
+      }
+  };
+
   // --- FUNÇÃO DE COMPARTILHAR ---
   const handleShare = (e: React.MouseEvent) => {
     e.preventDefault(); 
     e.stopPropagation();
 
-    // Gera o link interno do seu site (para a página que criamos antes)
+    // Gera o link interno do seu site
     const internalUrl = `${window.location.origin}/produto/${productId}`;
 
-    // Tenta usar o compartilhamento nativo do celular (WhatsApp, etc)
     if (navigator.share) {
         navigator.share({
             title: product.title,
@@ -59,7 +71,6 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
             url: internalUrl
         }).catch(console.error);
     } else {
-        // Se for no PC, copia para a área de transferência
         navigator.clipboard.writeText(internalUrl);
         alert("Link do produto copiado! Pode colar no WhatsApp.");
     }
@@ -71,7 +82,7 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
       {/* --- BOTÕES FLUTUANTES (SHARE + FAVORITO) --- */}
       <div className="absolute top-3 right-3 z-20 flex gap-2">
           
-          {/* Botão Compartilhar (NOVO) */}
+          {/* Botão Compartilhar */}
           <button 
             onClick={handleShare}
             className="p-2 rounded-full bg-black/50 backdrop-blur-md shadow-sm hover:scale-110 transition-transform hover:bg-blue-600 text-zinc-300 hover:text-white"
@@ -96,7 +107,6 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
       </div>
 
       {/* ÁREA DA IMAGEM */}
-      {/* Tornamos a imagem clicável para ir para a página de detalhes interna */}
       <Link href={`/produto/${productId}`} className="relative aspect-[4/3] p-4 bg-white flex items-center justify-center overflow-hidden cursor-pointer">
         
         {/* Etiqueta de Desconto */}
@@ -132,7 +142,7 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
           {category}
         </span>
         
-        {/* Título (Link para página interna) */}
+        {/* Título */}
         <Link href={`/produto/${productId}`} className="font-bold text-sm leading-tight mb-2 text-zinc-100 group-hover:text-[#FFE600] transition-colors line-clamp-2 min-h-[2.5rem]" title={product.title}>
           {product.title}
         </Link>
@@ -171,11 +181,12 @@ export default function ProductCard({ product, onOpenReview }: ProductCardProps)
             <Eye size={14} /> Análise
           </button>
           
-          {/* BOTÃO ÚNICO MERCADO LIVRE */}
+          {/* BOTÃO ÚNICO MERCADO LIVRE + CLICK TRACKING */}
           <a 
             href={link}
             target={isAvailable ? "_blank" : "_self"} 
             rel="noopener noreferrer nofollow"
+            onClick={handleBuyClick} // <--- 2. ADICIONAMOS O EVENTO AQUI
             className={`flex items-center justify-center gap-2 px-3 py-2 font-bold rounded-lg transition-colors shadow-sm hover:shadow-md text-xs ${btnStyle}`}
           >
             <ShoppingBag size={14} />

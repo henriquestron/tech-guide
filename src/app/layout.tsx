@@ -2,24 +2,21 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer"; // Vamos criar esse arquivo no passo 4
-import { FavoritesProvider } from "@/context/FavoritesContext"; // <--- Importe isso
-
-
+import Footer from "@/components/Footer"; 
+import { FavoritesProvider } from "@/context/FavoritesContext";
+import OneSignalSetup from "@/components/OneSignalSetup"; // <--- 1. IMPORTE AQUI
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TechGuide Ofertas", // Título do seu site
+  title: "TechGuide Ofertas", 
   description: "As melhores ofertas tech selecionadas por IA.",
   
-  // --- ADICIONE ISSO AQUI ---
   verification: {
     other: {
-      lomadee: "2324685", // Ex: "22558899"
+      lomadee: "2324685", 
     },
   },
-  // --------------------------
 };
 
 export default function RootLayout({
@@ -30,7 +27,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={inter.className}>
-        <FavoritesProvider> {/* <--- Adicione aqui abrindo */}
+        <OneSignalSetup /> {/* <--- 2. ADICIONE AQUI NO TOPO DO BODY */}
+        
+        <FavoritesProvider> 
           <div className="flex flex-col min-h-screen">
             <Navbar /> 
             <main className="flex-grow">
@@ -38,7 +37,7 @@ export default function RootLayout({
             </main>
             <Footer />
           </div>
-        </FavoritesProvider> {/* <--- Feche aqui */}
+        </FavoritesProvider> 
       </body>
     </html>
   );

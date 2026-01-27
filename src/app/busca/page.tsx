@@ -1,16 +1,30 @@
 import { products as staticProducts } from "@/data/products";
 import { supabase } from "@/lib/supabaseClient";
 import ProductShowcase from "@/components/ProductShowcase";
+import NotifyMeForm from "@/components/NotifyMeForm";
+import InterestTracker from "@/components/InterestTracker"; // <--- 1. IMPORTE AQUI
 
 export const dynamic = 'force-dynamic';
 
-// ATUALIZAÇÃO NEXT.JS 15: searchParams agora é uma Promise
 interface SearchPageProps {
   searchParams: Promise<{ q?: string }>;
 }
 
+// --- FUNÇÃO SILENCIOSA PARA GRAVAR DADOS (Espião) ---
+async function saveSearchStats(term: string, count: number) {
+  if (!term) return;
+  try {
+    await supabase.from('analytics_searches').insert({
+        term: term,
+        results_count: count
+    });
+  } catch (e) {
+    console.error("Erro ao salvar analytics:", e);
+  }
+}
+
 export default async function SearchPage(props: SearchPageProps) {
-  // 1. Desembrulha a promessa (Correção do erro)
+  // 1. Desembrulha a promessa
   const searchParams = await props.searchParams;
   const query = searchParams.q || "";
   
@@ -44,7 +58,6 @@ export default async function SearchPage(props: SearchPageProps) {
     rating: Number(item.rating) || 4.5,
     shortDescription: item.short_description || "",
     brand: item.brand || "Tech",
-    affiliateLink: item.link || "#", 
     link: item.link || "#",
     fullReview: item.full_review || {}
   }));
@@ -61,12 +74,21 @@ export default async function SearchPage(props: SearchPageProps) {
     );
   });
 
-  // 5. Junta tudo e protege contra nulos (Filtro de Segurança)
+  // 5. Junta tudo
   const allFoundProducts = [...formattedDbProducts, ...filteredStatic]
     .filter(p => p && p.id);
 
+  // --- 🕵️ O ESPIÃO DE BUSCAS (ESTATÍSTICA INTERNA) ---
+  if (query.trim().length > 0) {
+      await saveSearchStats(query, allFoundProducts.length);
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black pt-8 pb-20">
+      
+      {/* <--- 2. ADICIONE O RASTREADOR AQUI (INVISÍVEL) */}
+      <InterestTracker term={query} /> 
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Cabeçalho da Busca */}
@@ -79,10 +101,18 @@ export default async function SearchPage(props: SearchPageProps) {
           </p>
         </div>
 
-        {/* Exibição dos Produtos */}
-        <div className="-mt-10"> 
-           <ProductShowcase products={allFoundProducts as any} />
-        </div>
+        {/* --- LÓGICA DE EXIBIÇÃO --- */}
+        {allFoundProducts.length === 0 && query ? (
+            // CASO 1: Não achou nada -> Mostra o formulário "Me Avise"
+            <div className="flex flex-col items-center justify-center py-10 animate-in fade-in duration-500">
+                <NotifyMeForm term={query} />
+            </div>
+        ) : (
+            // CASO 2: Achou produtos -> Mostra a vitrine
+            <div className="-mt-10"> 
+               <ProductShowcase products={allFoundProducts as any} />
+            </div>
+        )}
 
       </div>
     </div>
