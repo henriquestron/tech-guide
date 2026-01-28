@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   
   verification: {
     other: {
+      google:"9Sf0JqnBwDbA6vhbUP61D33Sxq0MplirE1sF6J0aNJw",
       lomadee: "2324685", 
     },
   },
