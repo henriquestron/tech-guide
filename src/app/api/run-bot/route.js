@@ -9,65 +9,102 @@ export const maxDuration = 300;
 // Função auxiliar de espera (Delay)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// --- 🔔 FUNÇÃO DE NOTIFICAÇÃO (LOTERIA) ---
+// --- 🔔 FUNÇÃO DE NOTIFICAÇÃO (LOTERIA + SMART TAGS) ---
 async function tentarEnviarNotificacao(produto, precoAntigo, precoNovo, categoria, termoBusca) {
     const ONE_SIGNAL_APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
     const ONE_SIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY; 
 
     if (!ONE_SIGNAL_APP_ID || !ONE_SIGNAL_API_KEY) return;
 
-    // Se for produto NOVO (precoAntigo = 0), manda para quem tem interesse no termo
+    // Se for produto NOVO (precoAntigo = 0)
     const isNovo = precoAntigo === 0;
     
     // Se for queda de preço
     const desconto = isNovo ? 0 : 1 - (precoNovo / precoAntigo); 
 
-    // --- REGRAS DO JOGO ---
+    // --- REGRAS DO JOGO (QUEM VAI RECEBER?) ---
     let target = "ninguem";
     const sorteio = Math.random(); // 0.0 a 1.0
 
     if (isNovo) {
-        // Produto Novo: 100% de chance de avisar quem segue a categoria/termo
+        // Produto Novo: 100% de chance de avisar interessados
         target = "interesse";
     } else {
         // Queda de Preço:
-        // 1. Desconto pequeno (< 10%): Ignora
-        if (desconto < 0.10) return;
+        // 1. Desconto pequeno (< 5%): Ignora
+        if (desconto < 0.05) return;
 
         // 2. Desconto Monstro (> 40%): 30% de chance de mandar pra TODOS (Oferta Relâmpago)
         if (desconto > 0.40 && sorteio > 0.70) {
             target = "todos";
         } 
-        // 3. Desconto Bom (> 15%): 80% de chance de mandar pra quem tem INTERESSE
-        else if (desconto > 0.15 && sorteio > 0.20) {
+        // 3. Desconto Bom (> 10%): Avisa interessados
+        else if (desconto > 0.10) {
             target = "interesse";
         }
     }
 
     if (target === "ninguem") return;
 
-    // --- TEXTOS ---
+    // --- PREPARAÇÃO DE TEXTOS (BLINDADO CONTRA ERROS) ---
+    // Garante que tenha título para não dar erro de substring
+    const nomeProduto = produto.title ? produto.title : "Produto em Oferta";
+    const nomeCortado = nomeProduto.length > 20 ? nomeProduto.substring(0, 20) + "..." : nomeProduto;
+
     let titulo = "";
     let mensagem = "";
     let filters = [];
 
     if (target === "todos") {
         titulo = "🔥 OFERTA SURPRESA!";
-        mensagem = `${produto.title} despencou ${Math.round(desconto * 100)}%! De R$${precoAntigo} por R$${precoNovo}.`;
+        mensagem = `${nomeCortado} despencou ${Math.round(desconto * 100)}%! De R$${precoAntigo} por R$${precoNovo}.`;
+        // Envia para quem tem QUALQUER tag de interesse (ou seja, usuários ativos)
         filters = [{ field: "tag", key: "interest", relation: "exists" }];
     } else {
-        // Define a Tag: Ou é o termo exato buscado (ex: "iphone") ou a categoria (ex: "celulares")
-        const tagAlvo = termoBusca ? termoBusca.split(' ')[0].toLowerCase() : categoria.toLowerCase();
+        // === LÓGICA SMART TAGS (MULTICAST) ===
+        // Gera lista de tags baseada na Categoria E no Título
+        const tagsAlvo = [];
+
+        // 1. Adiciona a categoria base (ex: "celulares")
+        if (categoria) tagsAlvo.push(categoria.toLowerCase());
         
-        if (isNovo) {
-            titulo = `Chegou: ${produto.title.substring(0, 20)}...`;
-            mensagem = "Encontramos o produto que você queria! Toque para ver.";
-        } else {
-            titulo = `📉 Baixou: ${produto.title.substring(0, 20)}...`;
-            mensagem = `Caiu ${Math.round(desconto * 100)}%! Aproveite antes que acabe.`;
+        // 2. Adiciona o termo de busca base (ex: "iphone")
+        if (termoBusca) tagsAlvo.push(termoBusca.split(' ')[0].toLowerCase());
+
+        // 3. Adiciona tags baseadas no Título do Produto
+        const tLower = nomeProduto.toLowerCase();
+        if (tLower.includes('iphone')) tagsAlvo.push('iphone');
+        if (tLower.includes('android') || tLower.includes('samsung') || tLower.includes('xiaomi') || tLower.includes('motorola')) tagsAlvo.push('android');
+        if (tLower.includes('macbook') || tLower.includes('apple')) tagsAlvo.push('macbook');
+        if (tLower.includes('gamer') || tLower.includes('rtx') || tLower.includes('gtx')) tagsAlvo.push('gamer');
+        if (tLower.includes('ps5') || tLower.includes('playstation') || tLower.includes('xbox') || tLower.includes('nintendo')) tagsAlvo.push('console');
+        if (tLower.includes('notebook') || tLower.includes('laptop')) tagsAlvo.push('notebooks');
+
+        // Remove duplicadas
+        const tagsUnicas = [...new Set(tagsAlvo)];
+
+        // Monta o filtro com OR (OU)
+        // Ex: "Quem gosta de celulares" OU "Quem gosta de iphone"
+        tagsUnicas.forEach((tag, index) => {
+            filters.push({ field: "tag", key: "interest", relation: "=", value: tag });
+            if (index < tagsUnicas.length - 1) {
+                filters.push({ operator: "OR" });
+            }
+        });
+
+        // Fallback se não achou tags
+        if (filters.length === 0) {
+            filters.push({ field: "tag", key: "interest", relation: "=", value: "ofertas" });
         }
-        
-        filters = [{ field: "tag", key: "interest", relation: "=", value: tagAlvo }];
+
+        // Define os textos
+        if (isNovo) {
+            titulo = `Chegou: ${nomeCortado}`;
+            mensagem = "Encontramos uma oferta que combina com você! Toque para ver.";
+        } else {
+            titulo = `📉 Baixou: ${nomeCortado}`;
+            mensagem = `Caiu ${Math.round(desconto * 100)}%! De R$${precoAntigo} por R$${precoNovo}.`;
+        }
     }
 
     // --- DISPARO ---
@@ -84,12 +121,12 @@ async function tentarEnviarNotificacao(produto, precoAntigo, precoNovo, categori
                 contents: { en: mensagem },
                 filters: target === "todos" ? undefined : filters,
                 included_segments: target === "todos" ? ["Total Subscriptions"] : undefined,
-                chrome_web_image: produto.image,
+                chrome_web_image: produto.image || undefined,
                 url: `${process.env.NEXT_PUBLIC_SITE_URL}/produto/${produto.id}`,
-                collapse_id: String(produto.id) // Evita flood (substitui notificação antiga do mesmo produto)
+                collapse_id: String(produto.id)
             })
         });
-        console.log(`🔔 Push Enviado (${target}): ${titulo}`);
+        console.log(`🔔 Push Enviado [${target}]: ${titulo} | Tags: [${filters.map(f=>f.value).filter(Boolean)}]`);
     } catch (e) {
         console.error("Erro Push:", e);
     }
@@ -312,7 +349,7 @@ export async function POST(req) {
             short_description: dadosReview.shortDescription,
             full_review: dadosReview.fullReview,
             status: 'pending'
-          }]).select().single(); // Retorna o dado inserido para pegarmos o ID
+          }]).select().single(); 
 
           if (!error) {
               salvos++;
@@ -338,7 +375,6 @@ export async function POST(req) {
                atualizados++;
 
                // 🔔 NOTIFICAÇÃO (Queda de Preço)
-               // Só avisa se o preço baixou (Novo < Velho)
                if (produto.price < existente.price) {
                    await tentarEnviarNotificacao(
                        { ...produto, id: existente.id }, // Dados
