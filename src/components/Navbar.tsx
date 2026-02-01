@@ -58,6 +58,7 @@ const categories: CategoryItem[] = [
       { name: 'Memória RAM', slug: 'memoria-ram' },
       { name: 'Armazenamento', slug: 'ssd-hd' },
       { name: 'Fontes', slug: 'fonte' }, // Adicionei Fontes aqui tbm pra bater com seu admin
+      {name: 'Fans', slug: 'fans'}
     ]
   },
   { 

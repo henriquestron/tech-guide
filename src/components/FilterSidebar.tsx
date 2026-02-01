@@ -13,6 +13,7 @@ const subcategoryOptions: Record<string, { label: string; slug: string }[]> = {
     { label: "Memória RAM", slug: "memoria-ram" },
     { label: "Armazenamento", slug: "ssd-hd" },
     { label: "Fontes", slug: "fonte" },
+    {label: "Fans", slug: "fans"}
   ],
   computadores: [
     { label: "PC Gamer", slug: "pc-gamer" },
