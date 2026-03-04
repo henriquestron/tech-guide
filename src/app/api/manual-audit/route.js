@@ -37,7 +37,7 @@ export async function POST(req) {
 
     // --- 🛑 FILTRO DE SEGURANÇA (NOVO) ---
     // Se o link original for um link de afiliado (/sec/), pulamos a auditoria
-    if (original_link.includes('/sec/') || original_link.includes('mercadolivre.com/sec')) {
+    if (original_link.includes('/sec/') || original_link.includes('mercadolivre.com/sec') || original_link.includes('meli.la/')) {
         console.log(`⏭️ SKIPPED: Link de afiliado detectado na coluna original. ID: ${id}`);
         return NextResponse.json({ status: 'skipped', reason: 'Link Afiliado na origem' });
     }

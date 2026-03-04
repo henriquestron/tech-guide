@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     let erros = 0;
 
     for (const item of items) {
-        if (item.id && item.link && item.link.includes('mercadolivre')) { // Validação básica
+        if (item.id && item.link && item.link.includes('meli.la')) { // Validação básica
             const { error } = await supabase
                 .from('products')
                 .update({ 

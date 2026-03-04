@@ -127,7 +127,7 @@ function ProductRow({ product, onDelete, onApprove, onAuditSingle, onFixCategory
   
   const isPending = product.status === 'pending';
   const isFlash = product.expires_at !== null;
-  const hasOriginalLink = product.original_link && product.original_link.includes('mercadolivre');
+  const hasOriginalLink = product.original_link && product.original_link.includes('meli.la');
 
   return (
     <tr className={`border-b border-zinc-800 transition-colors ${isSelected ? 'bg-blue-900/20' : 'hover:bg-zinc-900/50'}`}>
